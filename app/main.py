@@ -13,20 +13,21 @@ from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
 from app.people import profile as render_profile, profile_url, merged_contacts
+from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
-app = FastAPI(title="Network Search")
-APP_VERSION = "0.6.0"
+app = FastAPI(title="Farley File")
+APP_VERSION = "0.7.0"
 
 
 def footer():
     return (f'<footer style="margin-top:36px;padding:18px 0;border-top:1px solid #dde6e5;'
             f'color:#647078;font-size:.85rem;text-align:center">'
-            f'Network Search · v{APP_VERSION} · '
+            f'Farley File · v{APP_VERSION} · '
             f'<a href="https://github.com/MartinZwolle/network-search" '
             f'target="_blank" rel="noopener noreferrer">GitHub</a></footer>')
 
@@ -64,6 +65,8 @@ with connect() as _db:
     migrate_employment(_db)
     migrate_instagram(_db)
     migrate_identities(_db)
+    migrate_person_ids(_db)
+    sync_person_ids(_db)
 
 
 def profile_key(url):
@@ -173,6 +176,7 @@ async def upload(file: UploadFile = File(...)):
             db.execute("""INSERT INTO messages_fts
                         SELECT message_key, subject, content FROM messages""")
         rebuild_links(db)
+        sync_person_ids(db)
     return RedirectResponse("/?imported=" + str(count), status_code=303)
 
 
@@ -184,6 +188,7 @@ async def upload_instagram(file: UploadFile = File(...)):
     try:
         with connect() as db:
             counts = import_archive(db, content)
+            sync_person_ids(db)
     except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
     return RedirectResponse(
@@ -207,8 +212,12 @@ def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(.
                 raise HTTPException(400, "Onbekende actie")
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+    person_id = None
+    if source == "person":
+        with connect() as db:
+            person_id = account_person(db, "linkedin", linkedin_url)
     destination = ("/matches" if source == "matches" else
-                   profile_url(linkedin_url=linkedin_url) if source == "person" else
+                   "/person/" + str(person_id) if person_id is not None else
                    "/contact?url=" + quote(linkedin_url, safe=""))
     return RedirectResponse(destination, status_code=303)
 
@@ -276,7 +285,7 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
         people_results = merged_contacts(db, contacts, ig_results) if q.strip() else []
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Network Search</title><style>
+    <title>Farley File</title><style>
 :root{{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}}
 *{{box-sizing:border-box}}body{{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}}
 h1,h2,h3{{line-height:1.25;letter-spacing:-.035em}}h1{{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}}h2{{font-size:1.45rem}}
@@ -291,7 +300,7 @@ article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
-</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a></nav></header>
+</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Farley File</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a></nav></header>
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
@@ -328,7 +337,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
         for source, person in people_results:
             if source == "linkedin":
                 display_name = " ".join(filter(None, [person["first_name"], person["last_name"]]))
-                person_link = profile_url(linkedin_url=person["url"])
+                person_link = "/person/" + str(account_person(db, "linkedin", person["url"]))
                 with connect() as links_db:
                     linked_handles = [r["instagram_username"] for r in links_db.execute(
                         "SELECT instagram_username FROM profile_links WHERE linkedin_url=? ORDER BY instagram_username",
@@ -339,7 +348,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                 count = f'{person["message_count"]} LinkedIn-berichten'
             else:
                 display_name = "@" + person["username"]
-                person_link = profile_url(instagram_username=person["username"])
+                person_link = "/person/" + str(account_person(db, "instagram", person["username"]))
                 social_labels = "Instagram"
                 note = "Instagram-account"
                 count = ""
@@ -382,18 +391,67 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 
 @app.get("/contact")
 def contact_detail(url: str):
-    """Keep bookmarked historical contact URLs working."""
-    return RedirectResponse(profile_url(linkedin_url=url), status_code=303)
+    """Redirect older saved contact links to the stable person ID."""
+    with connect() as db:
+        pid = account_person(db, "linkedin", url)
+    if pid is None:
+        raise HTTPException(404, "Contact niet gevonden")
+    return RedirectResponse("/person/" + str(pid), status_code=303)
 
 
 @app.get("/person", response_class=HTMLResponse)
 def person_detail(linkedin_url: str = "", instagram_username: str = "", find: str = ""):
+    """Redirect historical profile URLs; keep Obsidian links permanent."""
     with connect() as db:
-        return render_profile(db, linkedin_url=linkedin_url,
-                              instagram_username=instagram_username,
+        pid = (account_person(db, "linkedin", linkedin_url) if linkedin_url else
+               account_person(db, "instagram", instagram_username))
+    if pid is None:
+        raise HTTPException(404, "Persoon niet gevonden")
+    destination = "/person/" + str(pid)
+    if find:
+        destination += "?find=" + quote(find, safe="")
+    return RedirectResponse(destination, status_code=303)
+
+
+@app.get("/person/{person_id}", response_class=HTMLResponse)
+def person_by_id(person_id: int, find: str = ""):
+    with connect() as db:
+        info = person_details(db, person_id)
+        if info is None:
+            raise HTTPException(404, "Persoon niet gevonden")
+        current_id = info[0]
+        if current_id != person_id:
+            destination = "/person/" + str(current_id)
+            if find:
+                destination += "?find=" + quote(find, safe="")
+            return RedirectResponse(destination, status_code=303)
+        return render_profile(db, person_id=current_id,
                               find=find, footer=footer,
                               contact_timeline=contact_timeline,
                               profile_key=profile_key)
+
+
+@app.post("/obsidian-note/add")
+def obsidian_note_add(person_id: int = Form(...), title: str = Form(...),
+                      target: str = Form(...)):
+    with connect() as db:
+        try:
+            add_note(db, person_id, title, target)
+            current_id = person_details(db, person_id)[0]
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(current_id), status_code=303)
+
+
+@app.post("/obsidian-note/delete")
+def obsidian_note_delete(person_id: int = Form(...), note_id: int = Form(...)):
+    with connect() as db:
+        try:
+            remove_note(db, person_id, note_id)
+            current_id = person_details(db, person_id)[0]
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(current_id), status_code=303)
 
 
 @app.get("/activity", response_class=HTMLResponse)
@@ -402,7 +460,7 @@ def activity_page():
         overview = network_activity(db)
     page = """<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Netwerkactiviteit · Network Search</title>
+    <title>Netwerkactiviteit · Farley File</title>
     <style>
     :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
     *{box-sizing:border-box}
@@ -441,7 +499,7 @@ def possible_matches(page: int = 1, linked: int = 0):
     visible = suggestions[(page - 1) * page_size:page * page_size]
     html = """<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mogelijke koppelingen · Network Search</title>
+    <title>Mogelijke koppelingen · Farley File</title>
     <style>
     :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
     *{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;
