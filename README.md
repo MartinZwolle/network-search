@@ -1,8 +1,17 @@
-# Network Search
+# Farley File
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.6.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.7.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Farley File & Obsidian (v0.7.0)
+
+- **Nieuwe naam:** de webapp heet **Farley File**. De bestaande GitHub-repository, Compose-stack, poort 8098 en database blijven voor compatibiliteit `network-search` heten.
+- **Permanente persoons-ID's:** iedere geïmporteerde persoon heeft een vaste URL `/person/<id>`. Accounts houden hun eigen oorspronkelijke sleutels. Bestaande bevestigde koppelingen blijven bewaard.
+- **Veilige koppelingen:** bij samenvoegen blijft de ID van het LinkedIn-profiel bestaan en leidt de oude Instagram-ID door. Bij ontkoppelen krijgt het afgesplitste Instagram-account een nieuw profiel; de oorspronkelijke persoon-URL blijft behouden.
+- **Obsidian:** op iedere profielpagina staat een knop om een Markdown-link `[👤 Naam](http://homelab:8098/person/<id>)` te kopiëren. Bij browsers die klembordtoegang op HTTP blokkeren verschijnt een kopieervak.
+- **Gespreksverslagen blijven in Obsidian:** optioneel kun je één of meer `obsidian://open?... `-links met titel aan een persoon toevoegen, bekijken of verwijderen. Farley File slaat uitsluitend verwijzingen op, niet de inhoud van je notities. Obsidian is nodig op het apparaat dat de link opent.
+- **Privacy:** beide applicaties blijven privé. Farley File biedt nog geen ingebouwde authenticatie, dus uitsluitend bereikbaar maken via vertrouwd LAN of Tailscale (niet publiek).
 
 ## Personen en sociale accounts (v0.6.0)
 
@@ -86,7 +95,9 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [x] Eén persoonspagina voor LinkedIn en Instagram, handmatig koppelen vanuit beide richtingen en zoekresultaten ontdubbelen
 - [x] Eerste handmatige koppeling LinkedIn ↔ Instagram, met suggesties en ontkoppelen
 - [ ] Uitbreiding naar een universeel personenmodel (ook voor Facebook)
-- [ ] Monica-integratie voor notities, contactmomenten en herinneringen
+- [x] Farley File-naam, permanente personenlinks en Obsidian-notitiekoppeling
+- [ ] Verdere persoonlijke context (hoe kennen we elkaar?) zonder Obsidian-gespreksverslagen te dupliceren
+- [ ] Eventueel een Monica-integratie als daar later behoefte aan is
 - [ ] Verdere zoekverbeteringen, eventueel optionele lokale semantische zoekfunctie
 
 ## Techniek
