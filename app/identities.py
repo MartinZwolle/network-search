@@ -69,3 +69,36 @@ def unlink(db, linkedin_url, instagram_username):
         "DELETE FROM profile_links WHERE linkedin_url=? AND instagram_username=?",
         (linkedin_url, instagram_username),
     )
+
+
+def all_candidates(db):
+    """Suggest unlinked exact compact-name matches across the entire database.
+
+    This does not infer identities, and intentionally excludes loose/fuzzy matches.
+    Return deterministic sorted suggestions without loading message content.
+    """
+    accounts = {}
+    for row in db.execute("""SELECT username FROM instagram_accounts
+                              WHERE follows=1 OR follower=1 ORDER BY username"""):
+        key = compact(row["username"])
+        if key:
+            accounts.setdefault(key, []).append(row["username"])
+    linked = {row["instagram_username"] for row in db.execute(
+        "SELECT instagram_username FROM profile_links"
+    )}
+    suggestions = []
+    for contact in db.execute(
+        """SELECT url, first_name, last_name, company, position
+           FROM contacts ORDER BY last_name, first_name"""
+    ):
+        first = (contact["first_name"] or "").strip()
+        last = (contact["last_name"] or "").strip()
+        if not first or not last:
+            continue
+        key = compact(first + last)
+        if len(key) < 6:
+            continue
+        for handle in accounts.get(key, []):
+            if handle not in linked:
+                suggestions.append((contact, handle))
+    return suggestions
