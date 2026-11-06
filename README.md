@@ -2,11 +2,12 @@
 
 Een lichte, zelfgehoste zoekmachine voor je LinkedIn-netwerk. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.5.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.5.1** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
 ## Mogelijkheden
 
 - **Instagram ZIP-import:** officiële JSON-export in één keer uploaden. Alleen volgers, gevolgde accounts en normale inbox-tekstberichten. Geen message requests, broadcasts, gesynchroniseerde telefooncontacten of media.
+- **Profielen handmatig koppelen:** een zoekopdracht zoals `Ilse Wintermans` kan ook `@ilsewintermans` vinden. Bij exacte overeenkomst van naam en gebruikersnaam verschijnt een voorstel *Mogelijk dezelfde persoon*. Koppelen vereist een expliciete bevestiging en kan vanaf de contactpagina worden teruggedraaid. Geen automatische samenvoeging van personen.
 - **Instagram doorzoeken:** accounts en inbox-tekstberichten verschijnen afzonderlijk bij zoekresultaten. Instagram-accounts worden niet automatisch aan LinkedIn-personen gekoppeld.
 
 
@@ -72,7 +73,8 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [ ] Uitgebreide relatieanalyse: wederkerigheid, filters en selectie voor Monica
 - [x] Instagram: volgers, gevolgde accounts en inbox-tekst importeren
 - [ ] Facebook-export ondersteunen
-- [ ] Accounts van dezelfde persoon veilig koppelen (met handmatige bevestiging)
+- [x] Eerste handmatige koppeling LinkedIn ↔ Instagram, met suggesties en ontkoppelen
+- [ ] Uitbreiding naar een universeel personenmodel (ook voor Facebook)
 - [ ] Monica-integratie voor notities, contactmomenten en herinneringen
 - [ ] Verdere zoekverbeteringen, eventueel optionele lokale semantische zoekfunctie
 
