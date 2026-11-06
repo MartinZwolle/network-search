@@ -432,7 +432,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                 note = "Persoonlijk dossier"
                 count = ""
             elif source == "linkedin":
-                display_name = " ".join(filter(None, [person["first_name"], person["last_name"]]))
+                display_name = farley_display_name(db, account_person(db, "linkedin", person["url"]))
                 person_link = "/person/" + str(account_person(db, "linkedin", person["url"]))
                 with connect() as links_db:
                     linked_handles = [r["instagram_username"] for r in links_db.execute(
@@ -443,7 +443,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                 note = f'{person["position"] or ""} · {person["company"] or ""}'
                 count = f'{person["message_count"]} LinkedIn-berichten'
             else:
-                display_name = "@" + person["username"]
+                display_name = farley_display_name(db, account_person(db, "instagram", person["username"]))
                 person_link = "/person/" + str(account_person(db, "instagram", person["username"]))
                 social_labels = "Instagram"
                 note = "Instagram-account"
