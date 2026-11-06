@@ -207,8 +207,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     <section><h2>Zoeken</h2><form method="get">
     <input name="q" type="text" value="{escape(q, quote=True)}"
            placeholder="Naam, werkgever, functie of gesprek">
-    <button>Zoek</button></form></section>
-    </form></section>"""
+    <button>Zoek</button></form></section>"""
     if q.strip():
         page += f"<section><h2>Contacten ({len(contacts)} getoond)</h2>"
         for contact in contacts:
