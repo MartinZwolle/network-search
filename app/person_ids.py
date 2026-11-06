@@ -72,6 +72,10 @@ def merge(db, linkedin_url, instagram_username):
     source = ensure_account(db, "instagram", instagram_username)
     if source == dest:
         return dest
+    # Only if context schema is present (safe on older installations).
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='farley_context'").fetchone():
+        from app.context import merge_context
+        merge_context(db, source, dest)
     db.execute("UPDATE farley_accounts SET person_id=? WHERE person_id=?", (dest, source))
     db.execute("UPDATE farley_notes SET person_id=? WHERE person_id=?", (dest, source))
     db.execute("UPDATE farley_aliases SET current_id=? WHERE current_id=?", (dest, source))
