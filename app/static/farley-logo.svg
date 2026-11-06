@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Farley File</title>
+  <desc id="desc">Een groene archiefbak met persoonskaart en verbonden contacten.</desc>
+  <defs>
+    <linearGradient id="box" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#157c78"/>
+      <stop offset="1" stop-color="#075052"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" x2="0" y1="0" y2="1">
+      <stop stop-color="#ffefd0"/>
+      <stop offset="1" stop-color="#e9d1a7"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="23" fill="#eef3ef"/>
+  <path d="M21 51V27q0-7 7-7h72q7 0 7 7v28" fill="#0b4f50" stroke="#073c3e" stroke-width="3"/>
+  <rect x="30" y="26" width="68" height="65" rx="5" fill="#ceb186" transform="rotate(4 64 58)"/>
+  <rect x="27" y="22" width="69" height="66" rx="5" fill="#dfc496" transform="rotate(-4 61 55)"/>
+  <rect x="33" y="29" width="64" height="63" rx="5" fill="url(#card)" stroke="#b99b6c" stroke-width="2"/>
+  <circle cx="55" cy="48" r="10" fill="#4c625d"/>
+  <path d="M36 72q1-15 19-15t19 15" fill="#4c625d"/>
+  <path d="M78 46h12M78 54h12M78 62h9" stroke="#8b785c" stroke-width="3" stroke-linecap="round"/>
+  <path d="M17 76l9-20h76l9 20v26q0 9-9 9H26q-9 0-9-9Z" fill="url(#box)" stroke="#073f42" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="39" y="83" width="50" height="18" rx="4" fill="#f2d69f" stroke="#b28a50" stroke-width="2"/>
+  <text x="64" y="96" text-anchor="middle" fill="#123e3d" font-family="Georgia,serif" font-weight="bold" font-size="12" letter-spacing="1">FARLEY</text>
+  <circle cx="97" cy="96" r="5" fill="#d2935a" stroke="#fff0d1" stroke-width="1.5"/>
+</svg>
