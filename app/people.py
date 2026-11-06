@@ -9,7 +9,7 @@ from urllib.parse import quote
 from fastapi import HTTPException
 from app.person_ids import account_person, details as person_details
 from app.context import get as get_context, person_tags
-from app.manual import display_name as farley_display_name, employment as farley_employment
+from app.manual import display_name as farley_display_name, employment as farley_employment, possible_duplicates
 
 CSS = """
 :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
@@ -116,6 +116,43 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
             '<header><div class="profile-brand"><a href="/"><img src="/static/farley-logo.svg" alt="Farley File home" width="56" height="56"></a><span class="brand">Elegant Chaos / Labs</span></div>'
             f'<h1>{escape(name)}</h1><nav>{nav}</nav>'
             '<p class="muted">Eén persoon, meerdere sociale accounts.</p></header>')
+    if person_id is not None:
+        info = person_details(db, person_id)
+        manual = db.execute(
+            "SELECT created_manually FROM farley_person_names WHERE person_id=?",
+            (person_id,),
+        ).fetchone()
+        if manual and manual["created_manually"] and not info[1]:
+            html += ('<section><h2>Profielbeheer</h2>'
+                     '<p class="muted">Dit profiel is handmatig toegevoegd en heeft nog geen '
+                     'gekoppelde sociale accounts.</p>')
+            matches = possible_duplicates(db, name, exclude_id=person_id)
+            if matches:
+                html += ('<p><strong>Misschien bestaat deze persoon al:</strong></p>'
+                         '<p class="muted">Samenvoegen behoudt het bestaande profiel en '
+                         'neemt je handmatig ingevulde gegevens mee.</p>')
+                for match in matches:
+                    html += (f'<article><a href="/person/{match["id"]}">'
+                             f'{escape(match["name"])}</a> '
+                             f'<small>({escape(match["platforms"] or "handmatig")})</small>'
+                             f'<form method="post" action="/person/{person_id}/merge" '
+                             'onsubmit="return confirm(\'Deze twee profielen samenvoegen? '
+                             'Dit kan niet automatisch ongedaan worden gemaakt.\')">'
+                             f'<input type="hidden" name="target_id" value="{match["id"]}">'
+                             '<input type="hidden" name="confirmed" value="yes">'
+                             '<button type="submit">Samenvoegen met dit profiel</button>'
+                             '</form></article>')
+            html += (f'<details><summary style="cursor:pointer;color:#9a3333">'
+                     'Handmatig profiel verwijderen</summary>'
+                     '<p class="muted">Hiermee verdwijnen ook de handmatig ingevoerde '
+                     'gegevens van dit profiel. Dit is niet ongedaan te maken.</p>'
+                     f'<form method="post" action="/person/{person_id}/delete" '
+                     'onsubmit="return confirm(\'Dit profiel en alle bijbehorende '
+                     'handmatige gegevens definitief verwijderen?\')">'
+                     '<input type="hidden" name="confirmed" value="delete">'
+                     '<button type="submit" style="background:#9a3333">'
+                     'Profiel definitief verwijderen</button></form></details>'
+                     '</section>')
     if person_id is not None:
         html += (f'<details style="margin:8px 0 20px"><summary style="cursor:pointer;color:#087f80">'
                  '✎ Weergavenaam aanpassen</summary>'
