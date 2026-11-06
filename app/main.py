@@ -10,12 +10,13 @@ from urllib.parse import urlsplit, quote
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
+from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.3.2"
 
 
 def footer():
@@ -55,6 +56,8 @@ def initialize():
 
 
 initialize()
+with connect() as _db:
+    migrate_employment(_db)
 
 
 def profile_key(url):
@@ -127,17 +130,22 @@ async def upload(file: UploadFile = File(...)):
     if not (contacts or messages):
         raise HTTPException(400, "Geen Connections.csv of messages.csv")
     count = 0
+    timestamp = now_utc()
     with connect() as db:
         for row in rows:
             if contacts:
                 url = value(row, "URL")
                 if not url:
                     continue
+                observe_employment(db, url, value(row, "Company"),
+                                   value(row, "Position"), timestamp)
                 db.execute("""INSERT INTO contacts VALUES (?,?,?,?,?,?,?)
                 ON CONFLICT(url) DO UPDATE SET
                 first_name=excluded.first_name, last_name=excluded.last_name,
-                email=excluded.email, company=excluded.company,
-                position=excluded.position, connected_on=excluded.connected_on""",
+                email=CASE WHEN excluded.email <> '' THEN excluded.email ELSE contacts.email END,
+                company=CASE WHEN excluded.company <> '' THEN excluded.company ELSE contacts.company END,
+                position=CASE WHEN excluded.position <> '' THEN excluded.position ELSE contacts.position END,
+                connected_on=excluded.connected_on""",
                 (url, value(row, "First Name"), value(row, "Last Name"),
                  value(row, "Email Address"), value(row, "Company"),
                  value(row, "Position"), value(row, "Connected On")))
@@ -243,6 +251,10 @@ def contact_detail(url: str):
         contact = db.execute("SELECT * FROM contacts WHERE url=?", (url,)).fetchone()
         if contact is None:
             raise HTTPException(404, "Contact niet gevonden")
+        employment = db.execute("""
+            SELECT company, position, first_seen_at, superseded_at
+            FROM employment_history WHERE contact_url=? ORDER BY id DESC
+        """, (url,)).fetchall()
         history = db.execute("""
             SELECT m.* FROM contact_messages cm
             JOIN messages m ON m.message_key=cm.message_key
@@ -268,6 +280,19 @@ def contact_detail(url: str):
     {conversations} gesprekken · {received} ontvangen · {sent} overige</p>
     <p>Laatste LinkedIn-bericht: {escape(last)}</p></section>
     <section><h2>Berichten</h2>"""
+    page += """<section><h2>Werkhistorie (waargenomen)</h2>
+    <p class="muted">Datums geven aan wanneer Network Search een functie
+    voor het eerst in een LinkedIn-export zag, niet de echte startdatum.</p>"""
+    if employment:
+        for index, job in enumerate(employment):
+            label = "Huidige vermelding" if index == 0 else "Eerdere vermelding"
+            page += (f"<article><strong>{escape(job['position'] or 'Functie onbekend')}</strong>"
+                     f" · {escape(job['company'] or 'Werkgever onbekend')}<br>"
+                     f"<small>{label} · gezien vanaf "
+                     f"{escape(job['first_seen_at'][:10])}</small></article>")
+    else:
+        page += "<p>Er zijn nog geen functies geregistreerd.</p>"
+    page += "</section>"
     for msg in history:
         direction = "Ontvangen" if profile_key(msg["sender_url"]) == profile_key(url) else "Verzonden / groepsbericht"
         page += (f"<article><small>{escape(msg['date'] or '')} · {direction} · "
