@@ -86,11 +86,11 @@ def parse_network_tags(value):
     """Tags group persons, unlike free-form interests."""
     result = []
     seen = set()
-    for raw in re.split(r"[,;\\n]+", value or ""):
+    for raw in re.split(r"[,;\n]+", value or ""):
         tag = " ".join(raw.strip().lstrip("#").split()).casefold()
         if not tag:
             continue
-        if len(tag) > 50 or not re.fullmatch(r"[\\w][\\w -]*", tag, flags=re.UNICODE):
+        if len(tag) > 50 or not re.fullmatch(r"[\w][\w -]*", tag, flags=re.UNICODE):
             raise ValueError("Gebruik tags zoals #wehkamp of #bierproefclub (maximaal 50 tekens)")
         if tag not in seen:
             result.append(tag)
