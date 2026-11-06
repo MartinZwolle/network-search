@@ -1,8 +1,23 @@
 # Network Search
 
-Zelfgehoste LinkedIn-netwerkzoekmachine met FastAPI en SQLite FTS5.
+Een lichte, zelfgehoste zoekmachine voor je LinkedIn-netwerk. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-## Installatie
+> **Huidige versie: v0.3.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Mogelijkheden
+
+- **LinkedIn-connecties importeren** uit `Connections.csv` (naam, functie, werkgever, profiel-URL).
+- **Berichten importeren** uit `messages.csv`, inclusief doorzoekbare inhoud.
+- **Contactgeschiedenis bekijken:** klik op *Gesprekken bekijken (6)* om gekoppelde berichten te openen.
+- **Slimmer zoeken:** bekende termen worden uitgebreid met synoniemen in het Nederlands en Engels. Bijvoorbeeld `IT manager overheid` zoekt ook naar verwante functietitels en overheidsorganisaties. De zoekopdracht combineert begrippen met AND; synoniemen binnen een begrip met OR.
+- **Gerangschikte resultaten** op basis van full-text-relevantie.
+- **CSV-import onderaan de pagina** in een inklapbaar blok.
+- **Versienummer in de footer** en link naar GitHub.
+- Herhaald importeren is mogelijk; berichten worden op inhoudelijke rij-hash gededupliceerd.
+
+De regels voor zoektermuitbreiding staan in [app/search.py](app/search.py). Ze zijn bewust beperkt om misleidende matches te beperken: een functietitel bewijst niet dat iemand een specifieke vaardigheid beheerst.
+
+## Installeren
 
 ```sh
 git clone https://github.com/MartinZwolle/network-search.git
@@ -10,22 +25,48 @@ cd network-search
 docker compose up -d --build
 ```
 
-De applicatie luistert standaard op **127.0.0.1:8098** van de Docker-host. Maak vanaf je desktop bijvoorbeeld een SSH-tunnel:
+Open `http://<server-ip>:8098` vanaf je eigen netwerk. Wanneer de host via Tailscale/MagicDNS bereikbaar is, kan bijvoorbeeld `http://homelab:8098` werken.
 
-```sh
-ssh -L 8098:127.0.0.1:8098 gebruiker@homelab
-```
+**Let op:** de standaard Compose-poort is momenteel `8098:8080` en luistert daardoor op alle hostinterfaces. Als je alleen toegang via een SSH-tunnel wilt, wijzig dan de poort in `compose.yaml` naar `127.0.0.1:8098:8080`.
 
-Open vervolgens http://localhost:8098. Importeer de LinkedIn-bestanden `Connections.csv` en `messages.csv` afzonderlijk via de webinterface.
+### Bijwerken vanuit Git / Komodo
 
-## Veiligheid
+Omdat de Python-code tijdens het bouwen in de Docker-image wordt gekopieerd, is alleen een Git Pull en Deploy niet voldoende voor codewijzigingen. Gebruik **Pull → Rebuild → Deploy** (of het equivalent in je Komodo-versie). De lokale database blijft bewaard in de volume-mount `./data:/data`, zolang dezelfde persistente map gebruikt wordt.
 
-**Deze MVP heeft geen authenticatie. Publiceer de poort niet rechtstreeks op het internet.** Gebruik een SSH-tunnel of beschermde reverse proxy. CSV's en SQLite-data horen uitsluitend lokaal in `./data/` en worden met `.gitignore` uitgesloten. Zet nooit LinkedIn-exports, berichtinhoud of credentials in Git.
+### Importeren
 
-## Functies
+Open de app en klap onder de zoekresultaten **CSV importeren** uit. Upload de bestanden *apart*:
 
-- Contacten zoeken op naam, functie, werkgever
-- Volledige tekst van berichten doorzoeken
-- CSV-upload en herimport met deduplicatie
+1. `Connections.csv`
+2. `messages.csv`
 
-Monica-koppeling, geavanceerde relatieanalyse en semantisch zoeken zijn nog niet beschikbaar.
+De importer ondersteunt gebruikelijke LinkedIn-CSV-encodings; bestanden mogen maximaal **25 MB per upload** zijn. De ruwe uploadbestanden worden niet als losse bestanden opgeslagen. Geïmporteerde persoonsgegevens en berichtinhoud staan in `data/network.db` op de Docker-host.
+
+Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling tussen contacten en gesprekken gebeurt op basis van LinkedIn-profiel-URL. Groepsgesprekken kunnen meerdere contacten bevatten.
+
+## Privacy en beveiliging
+
+**Deze versie heeft geen login, autorisatie of bescherming tegen ongewenste uploads. Stel de app niet rechtstreeks aan het publieke internet bloot.** De standaardpoort is toegankelijk voor apparaten die de Docker-host op dat adres kunnen bereiken. Gebruik firewallregels, een vertrouwd thuisnetwerk, een Tailscale-only binding of een authenticerende reverse proxy.
+
+`data/`, `*.csv`, `*.db` en `.env` staan in `.gitignore`. **Commit nooit exports, de SQLite-database, persoonlijke gesprekken of wachtwoorden naar GitHub.** Zorg voor passende back-ups en toegangsrechten op de datamap.
+
+## Roadmap
+
+- [x] LinkedIn-contacten en berichten doorzoeken
+- [x] Contacten koppelen aan LinkedIn-berichten
+- [x] Berichtenaantal per contact en contactgeschiedenis
+- [x] NL/EN-synoniemen en relevantere sortering
+- [ ] Relatieanalyse: frequentie, laatste contact, wederkerigheid
+- [ ] Facebook- en Instagram-export ondersteunen
+- [ ] Accounts van dezelfde persoon veilig koppelen (met handmatige bevestiging)
+- [ ] Monica-integratie voor notities, contactmomenten en herinneringen
+- [ ] Verdere zoekverbeteringen, eventueel optionele lokale semantische zoekfunctie
+
+## Techniek
+
+- Python / FastAPI
+- SQLite + FTS5
+- HTML/CSS
+- Docker Compose
+
+Bijdragen en verbeteringen zijn welkom.
