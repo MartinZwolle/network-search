@@ -8,6 +8,12 @@ FIELDS = ("how_known", "background", "interests", "remember")
 
 def migrate(db):
     db.executescript("""
+    CREATE TABLE IF NOT EXISTS farley_tags (
+        person_id INTEGER NOT NULL REFERENCES farley_people(id),
+        tag TEXT NOT NULL COLLATE NOCASE,
+        PRIMARY KEY(person_id,tag)
+    );
+    CREATE INDEX IF NOT EXISTS idx_farley_tags_tag ON farley_tags(tag);
     CREATE TABLE IF NOT EXISTS farley_context (
         person_id INTEGER PRIMARY KEY REFERENCES farley_people(id),
         how_known TEXT NOT NULL DEFAULT '',
@@ -47,7 +53,7 @@ def tags(value):
     return ", ".join(result)
 
 
-def save(db, person_id, how_known="", background="", interests="", remember=""):
+def save(db, person_id, how_known="", background="", interests="", remember="", network_tags=""):
     info = details(db, person_id)
     if info is None:
         raise ValueError("Persoon niet gevonden")
@@ -59,6 +65,7 @@ def save(db, person_id, how_known="", background="", interests="", remember=""):
             raise ValueError(f"Het veld {key} is te lang (maximaal {limits[key]} tekens)")
         values[key] = text
     values["interests"] = tags(interests)
+    parsed_tags = parse_network_tags(network_tags)
     timestamp = datetime.now(timezone.utc).isoformat()
     db.execute(
         """INSERT INTO farley_context(person_id,how_known,background,interests,remember,updated_at)
@@ -70,12 +77,45 @@ def save(db, person_id, how_known="", background="", interests="", remember=""):
         (info[0], values["how_known"], values["background"],
          values["interests"], values["remember"], timestamp),
     )
+    db.execute("DELETE FROM farley_tags WHERE person_id=?", (info[0],))
+    db.executemany("INSERT INTO farley_tags(person_id,tag) VALUES (?,?)",
+                   [(info[0], tag) for tag in parsed_tags])
+
+
+def parse_network_tags(value):
+    """Tags group persons, unlike free-form interests."""
+    result = []
+    seen = set()
+    for raw in re.split(r"[,;\\n]+", value or ""):
+        tag = " ".join(raw.strip().lstrip("#").split()).casefold()
+        if not tag:
+            continue
+        if len(tag) > 50 or not re.fullmatch(r"[\\w][\\w -]*", tag, flags=re.UNICODE):
+            raise ValueError("Gebruik tags zoals #wehkamp of #bierproefclub (maximaal 50 tekens)")
+        if tag not in seen:
+            result.append(tag)
+            seen.add(tag)
+    if len(result) > 50:
+        raise ValueError("Maximaal 50 netwerktags per persoon")
+    return result
+
+
+def person_tags(db, person_id):
+    return [row["tag"] for row in db.execute(
+        "SELECT tag FROM farley_tags WHERE person_id=? ORDER BY tag",
+        (person_id,),
+    )]
 
 
 def merge_context(db, source, dest):
     """Keep existing destination text and preserve source text when people merge."""
     if source == dest:
         return
+    db.execute(
+        "INSERT OR IGNORE INTO farley_tags(person_id,tag) "
+        "SELECT ?,tag FROM farley_tags WHERE person_id=?", (dest, source)
+    )
+    db.execute("DELETE FROM farley_tags WHERE person_id=?", (source,))
     src = db.execute("SELECT * FROM farley_context WHERE person_id=?", (source,)).fetchone()
     if src is None:
         return
