@@ -76,10 +76,47 @@ def merge(db, linkedin_url, instagram_username):
     if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='farley_context'").fetchone():
         from app.context import merge_context
         merge_context(db, source, dest)
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='farley_person_names'").fetchone():
+        from app.manual import transfer_person_data
+        transfer_person_data(db, source, dest)
     db.execute("UPDATE farley_accounts SET person_id=? WHERE person_id=?", (dest, source))
     db.execute("UPDATE farley_notes SET person_id=? WHERE person_id=?", (dest, source))
     db.execute("UPDATE farley_aliases SET current_id=? WHERE current_id=?", (dest, source))
     db.execute("INSERT OR REPLACE INTO farley_aliases VALUES (?,?)", (source, dest))
+    return dest
+
+
+def merge_people(db, destination_id, source_id):
+    """Manually associate an existing social profile with a personal record.
+
+    Keep destination ID and preserve a redirect from the former source ID.
+    The caller must request this explicitly; this is never inferred by name.
+    """
+    dest = resolve(db, destination_id)
+    source = resolve(db, source_id)
+    if dest == source:
+        return dest
+    if details(db, dest) is None or details(db, source) is None:
+        raise ValueError("Persoon niet gevonden")
+    existing_li = db.execute(
+        "SELECT account_key FROM farley_accounts WHERE person_id=? AND platform='linkedin'",
+        (dest,),
+    ).fetchall()
+    new_li = db.execute(
+        "SELECT account_key FROM farley_accounts WHERE person_id=? AND platform='linkedin'",
+        (source,),
+    ).fetchall()
+    if existing_li and new_li and existing_li[0]["account_key"] != new_li[0]["account_key"]:
+        raise ValueError("Twee verschillende LinkedIn-profielen: eerst afzonderlijk controleren")
+    from app.context import merge_context
+    merge_context(db, source, dest)
+    from app.manual import transfer_person_data
+    transfer_person_data(db, source, dest)
+    db.execute("UPDATE farley_accounts SET person_id=? WHERE person_id=?", (dest, source))
+    db.execute("UPDATE farley_notes SET person_id=? WHERE person_id=?", (dest, source))
+    db.execute("UPDATE farley_aliases SET current_id=? WHERE current_id=?", (dest, source))
+    db.execute("INSERT OR REPLACE INTO farley_aliases(old_id,current_id) VALUES (?,?)",
+               (source, dest))
     return dest
 
 
