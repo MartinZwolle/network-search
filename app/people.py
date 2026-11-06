@@ -215,6 +215,12 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  f'<a href="{escape(linkedin_url, quote=True)}" target="_blank" rel="noopener noreferrer">'
                  f'{escape(name)} ↗</a><br><small>{escape(contact["position"] or "")} '
                  f'· {escape(contact["company"] or "")}</small></article>')
+    if person_id is not None:
+        info = person_details(db, person_id)
+        handles = [a["account_key"] for a in info[1] if a["platform"] == "instagram"]
+        accounts = [db.execute("SELECT * FROM instagram_accounts WHERE username=?", (h,)).fetchone()
+                    for h in handles]
+        accounts = [a for a in accounts if a is not None]
     for account in accounts:
         handle = account["username"]
         ig_url = "https://www.instagram.com/" + quote(handle, safe="") + "/"
@@ -269,60 +275,75 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  'style="width:min(100%,480px);padding:10px"><br>'
                  '<button type="submit">Notitielink toevoegen</button></form></section>')
 
+    if person_id is not None:
+        html += (f'<section><h2>Sociaal account toevoegen</h2>'
+                 '<p class="muted">Koppel een bestaand LinkedIn- of Instagram-account '
+                 'aan deze persoon, ook als je hem of haar handmatig hebt aangemaakt. '
+                 'Dit is een bewuste samenvoeging van twee profielen.</p>'
+                 f'<form method="post" action="/person/{person_id}/attach">'
+                 '<label>Platform<br><select name="platform">'
+                 '<option value="linkedin">LinkedIn</option>'
+                 '<option value="instagram">Instagram</option></select></label><br>'
+                 '<label>LinkedIn-profiel-URL of Instagram-gebruikersnaam<br>'
+                 '<input type="text" name="account" required maxlength="600" '
+                 'style="width:min(100%,480px);padding:10px"></label><br>'
+                 '<button type="submit">Account koppelen</button></form></section>')
+
     # The search is on the person's profile and can be started from EITHER source.
-    html += ('<section><h2>Een account aan deze persoon koppelen</h2>'
-             '<p class="muted">Zoek een account op het andere platform, controleer het profiel, '
-             'en bevestig zelf. We koppelen nooit automatisch op basis van een naam.</p>'
-             '<form method="get" action="/person">')
-    if contact is not None:
-        html += f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
-        label = "Zoek een Instagram-gebruikersnaam"
-    else:
-        html += f'<input type="hidden" name="instagram_username" value="{escape(standalone["username"], quote=True)}">'
-        label = "Zoek een LinkedIn-contact op naam"
-    html += (f'<label for="find">{label}</label><br>'
-             f'<input id="find" name="find" type="search" value="{escape(find, quote=True)}" '
-             'placeholder="Typ minstens 2 tekens" required minlength="2"> '
-             '<button type="submit">Zoeken</button></form>')
-    term = find.strip().casefold()
-    if len(term) >= 2:
-        like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    if contact is not None or standalone is not None:
+        html += ('<section><h2>Een account aan deze persoon koppelen</h2>'
+                 '<p class="muted">Zoek een account op het andere platform, controleer het profiel, '
+                 'en bevestig zelf. We koppelen nooit automatisch op basis van een naam.</p>'
+                 '<form method="get" action="/person">')
         if contact is not None:
-            options = db.execute(
-                """SELECT a.* FROM instagram_accounts a WHERE a.username LIKE ? ESCAPE '\\'
-                   AND NOT EXISTS (SELECT 1 FROM profile_links l WHERE l.instagram_username=a.username)
-                   ORDER BY a.username LIMIT 30""", (like,)
-            ).fetchall()
-            for option in options:
-                handle = option["username"]
-                ig_url = "https://www.instagram.com/" + quote(handle, safe="") + "/"
-                html += (f'<article><a href="{ig_url}" target="_blank" rel="noopener noreferrer">'
-                         f'@{escape(handle)} ↗</a>'
-                         '<form action="/profile-link" method="post">'
-                         f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
-                         f'<input type="hidden" name="instagram_username" value="{escape(handle, quote=True)}">'
-                         '<input type="hidden" name="source" value="person">'
-                         '<button type="submit">Aan deze persoon koppelen</button></form></article>')
+            html += f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
+            label = "Zoek een Instagram-gebruikersnaam"
         else:
-            options = db.execute(
-                """SELECT * FROM contacts
-                   WHERE (first_name || ' ' || last_name) LIKE ? ESCAPE '\\'
-                   ORDER BY last_name, first_name LIMIT 30""", (like,)
-            ).fetchall()
-            for option in options:
-                url = option["url"]
-                person_name = " ".join(filter(None, [option["first_name"], option["last_name"]]))
-                html += (f'<article><a href="{escape(url, quote=True)}" '
-                         f'target="_blank" rel="noopener noreferrer">{escape(person_name)} ↗</a>'
-                         f' <small>{escape(option["company"] or "")}</small>'
-                         '<form action="/profile-link" method="post">'
-                         f'<input type="hidden" name="linkedin_url" value="{escape(url, quote=True)}">'
-                         f'<input type="hidden" name="instagram_username" value="{escape(standalone["username"], quote=True)}">'
-                         '<input type="hidden" name="source" value="person">'
-                         '<button type="submit">Aan deze persoon koppelen</button></form></article>')
-        if not options:
-            html += '<p>Geen beschikbare accounts gevonden. Probeer een andere zoekterm.</p>'
-    html += '</section>'
+            html += f'<input type="hidden" name="instagram_username" value="{escape(standalone["username"], quote=True)}">'
+            label = "Zoek een LinkedIn-contact op naam"
+        html += (f'<label for="find">{label}</label><br>'
+                 f'<input id="find" name="find" type="search" value="{escape(find, quote=True)}" '
+                 'placeholder="Typ minstens 2 tekens" required minlength="2"> '
+                 '<button type="submit">Zoeken</button></form>')
+        term = find.strip().casefold()
+        if len(term) >= 2:
+            like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            if contact is not None:
+                options = db.execute(
+                    """SELECT a.* FROM instagram_accounts a WHERE a.username LIKE ? ESCAPE '\\'
+                       AND NOT EXISTS (SELECT 1 FROM profile_links l WHERE l.instagram_username=a.username)
+                       ORDER BY a.username LIMIT 30""", (like,)
+                ).fetchall()
+                for option in options:
+                    handle = option["username"]
+                    ig_url = "https://www.instagram.com/" + quote(handle, safe="") + "/"
+                    html += (f'<article><a href="{ig_url}" target="_blank" rel="noopener noreferrer">'
+                             f'@{escape(handle)} ↗</a>'
+                             '<form action="/profile-link" method="post">'
+                             f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
+                             f'<input type="hidden" name="instagram_username" value="{escape(handle, quote=True)}">'
+                             '<input type="hidden" name="source" value="person">'
+                             '<button type="submit">Aan deze persoon koppelen</button></form></article>')
+            else:
+                options = db.execute(
+                    """SELECT * FROM contacts
+                       WHERE (first_name || ' ' || last_name) LIKE ? ESCAPE '\\'
+                       ORDER BY last_name, first_name LIMIT 30""", (like,)
+                ).fetchall()
+                for option in options:
+                    url = option["url"]
+                    person_name = " ".join(filter(None, [option["first_name"], option["last_name"]]))
+                    html += (f'<article><a href="{escape(url, quote=True)}" '
+                             f'target="_blank" rel="noopener noreferrer">{escape(person_name)} ↗</a>'
+                             f' <small>{escape(option["company"] or "")}</small>'
+                             '<form action="/profile-link" method="post">'
+                             f'<input type="hidden" name="linkedin_url" value="{escape(url, quote=True)}">'
+                             f'<input type="hidden" name="instagram_username" value="{escape(standalone["username"], quote=True)}">'
+                             '<input type="hidden" name="source" value="person">'
+                             '<button type="submit">Aan deze persoon koppelen</button></form></article>')
+            if not options:
+                html += '<p>Geen beschikbare accounts gevonden. Probeer een andere zoekterm.</p>'
+        html += '</section>'
 
     if contact is not None:
         history = db.execute(
@@ -342,14 +363,7 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  f'<p>Laatste LinkedIn-bericht: {escape(last)}</p></section>')
         if contact_timeline:
             html += contact_timeline(history, jobs)
-        html += '<section><h2>Werkhistorie (waargenomen)</h2>'
-        for job in jobs:
-            html += (f'<article><strong>{escape(job["position"] or "Functie onbekend")}</strong>'
-                     f' · {escape(job["company"] or "Werkgever onbekend")} '
-                     f'<small>· gezien vanaf {escape((job["first_seen_at"] or "")[:10])}</small></article>')
-        if not jobs:
-            html += '<p>Geen werkhistorie gevonden.</p>'
-        html += '</section><section><h2>LinkedIn-berichten</h2>'
+        html += '<section><h2>LinkedIn-berichten</h2>'
         for msg in history:
             html += (f'<article><small>{escape(msg["date"] or "")} · '
                      f'{escape(msg["sender"] or "")}</small>'
