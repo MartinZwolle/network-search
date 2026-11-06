@@ -1,8 +1,16 @@
 # Network Search
 
-Een lichte, zelfgehoste zoekmachine voor je LinkedIn-netwerk. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
+Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.5.3** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.6.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Personen en sociale accounts (v0.6.0)
+
+- **Eén profielpagina per persoon:** zowel een LinkedIn-zoekresultaat als een Instagram-zoekresultaat opent `/person`. Ook een Instagram-account zonder LinkedIn-contact heeft een eigen profiel.
+- **Koppelen vanaf de profielpagina:** zoek vanuit een LinkedIn-profiel naar Instagram-gebruikersnamen, of andersom vanuit een Instagram-profiel naar een LinkedIn-contact. Bekijk het externe profiel en bevestig de link. Je kunt de accounts vanaf dezelfde pagina weer ontkoppelen.
+- **Geen dubbele personen in zoekresultaten:** wanneer LinkedIn en Instagram gekoppeld zijn verschijnt één resultaat, inclusief de gekoppelde accounts. Ook zoeken op de Instagram-gebruikersnaam toont de gezamenlijke profielpagina.
+- **Bestaande koppelingen behouden:** v0.6.0 gebruikt de bestaande `profile_links`-tabel, zonder destructieve migratie. De vroegere `/contact?url=`-links verwijzen door naar de nieuwe persoonspagina.
+- **Nog beperkt:** LinkedIn-berichten en werkhistorie staan op de profielpagina. Instagram-inboxberichten blijven doorzoekbaar, maar zijn nog niet betrouwbaar op gebruikersnaam aan een persoon gekoppeld. Facebook is nog niet geïmporteerd. Het model is voorbereid op een volgende bron, maar Facebook-koppelingen werken nog niet.
 
 ## Mogelijkheden
 
@@ -75,6 +83,7 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [ ] Uitgebreide relatieanalyse: wederkerigheid, filters en selectie voor Monica
 - [x] Instagram: volgers, gevolgde accounts en inbox-tekst importeren
 - [ ] Facebook-export ondersteunen
+- [x] Eén persoonspagina voor LinkedIn en Instagram, handmatig koppelen vanuit beide richtingen en zoekresultaten ontdubbelen
 - [x] Eerste handmatige koppeling LinkedIn ↔ Instagram, met suggesties en ontkoppelen
 - [ ] Uitbreiding naar een universeel personenmodel (ook voor Facebook)
 - [ ] Monica-integratie voor notities, contactmomenten en herinneringen
