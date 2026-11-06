@@ -14,7 +14,7 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.2"
 
 
 def footer():
@@ -175,8 +175,9 @@ def index(q: str = "", imported: int = 0):
         contacts = []
         messages = []
         if query_expression(q):
-            contacts = db.execute("""SELECT c.* FROM contacts_fts f
-                JOIN contacts c ON c.url=f.url
+            contacts = db.execute("""SELECT c.*, (SELECT COUNT(*) FROM contact_messages cm
+                         WHERE cm.contact_url=c.url) AS message_count
+                FROM contacts_fts f JOIN contacts c ON c.url=f.url
                 WHERE contacts_fts MATCH ? LIMIT 100""",
                 (query_expression(q),)).fetchall()
             messages = db.execute("""SELECT m.* FROM messages_fts f
@@ -207,12 +208,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     <input name="q" type="text" value="{escape(q, quote=True)}"
            placeholder="Naam, werkgever, functie of gesprek">
     <button>Zoek</button></form></section>
-    <section><h2>CSV importeren</h2>
-    <p>Upload Connections.csv en messages.csv afzonderlijk.
-       Alle gegevens blijven op je eigen server.</p>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".csv" required>
-    <button>Importeer</button></form></section>"""
+    </form></section>"""
     if q.strip():
         page += f"<section><h2>Contacten ({len(contacts)} getoond)</h2>"
         for contact in contacts:
@@ -221,7 +217,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'{escape(contact["last_name"] or "")}</strong><br>'
                      f'{escape(contact["position"] or "")} · '
                      f'{escape(contact["company"] or "")}<br>'
-                     f'<a href="/contact?url={quote(contact["url"], safe="")}">Gesprekken bekijken</a> · ' 
+                     f'<a href="/contact?url={quote(contact["url"], safe="")}">Gesprekken bekijken ({contact["message_count"]})</a> · ' 
                      f'<a href="{url}" target="_blank" rel="noopener noreferrer">'
                      'LinkedIn-profiel</a></article>')
         page += f"</section><section><h2>Berichten ({len(messages)} getoond)</h2>"
@@ -231,6 +227,14 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'{escape(message["sender"] or "")}</small>'
                      f'<pre>{escape((message["content"] or "")[:700])}</pre></article>')
         page += "</section>"
+    page += """<details style="margin-top:32px;background:#fff;border:1px solid #dde6e5;
+        padding:18px 24px;border-radius:5px">
+        <summary style="cursor:pointer;color:#087f80;font-weight:700">CSV importeren</summary>
+        <p>Upload Connections.csv en messages.csv afzonderlijk.
+        Alle gegevens blijven op je eigen server.</p>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".csv" required>
+        <button>Importeer</button></form></details>"""
     return page + footer() + "</html>"
 
 
