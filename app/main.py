@@ -10,13 +10,14 @@ from urllib.parse import urlsplit, quote
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
+from app.activity import contact_timeline, network_activity
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.4.0"
 
 
 def footer():
@@ -204,7 +205,7 @@ article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
-</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a></nav></header>
+</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a></nav></header>
     <p>{total_contacts} contacten · {total_messages} berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     <section><h2>Zoeken</h2><form method="get">
@@ -271,7 +272,7 @@ def contact_detail(url: str):
     <title>Contact · Network Search</title>""" + "<style>\n:root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}\n*{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}\nh1,h2,h3{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}h2{font-size:1.45rem}\na{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}\nheader{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}\n.brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}\nsection{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}\ninput[type=text]{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}\nbutton{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}\nbutton:hover{filter:brightness(.9)}article{padding:16px 0;border-top:1px solid var(--edge)}\narticle strong{font-size:1.08rem}small,.muted{color:var(--muted)}\npre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}\n.badge{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}\n@media(max-width:550px){input[type=text]{width:100%;margin-bottom:10px}button{width:100%}}\n</style>" + f"""
     <p><a href="/">← Terug naar zoeken</a></p>
     <header><span class="brand">Elegant Chaos / Labs</span>
-    <h1>{escape(name)}</h1><nav style="margin:12px 0"><a href="/" aria-label="Naar de startpagina">⌂ Home</a></nav><p>{escape(contact["position"] or "")} ·
+    <h1>{escape(name)}</h1><nav style="margin:12px 0"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a></nav><p>{escape(contact["position"] or "")} ·
     {escape(contact["company"] or "")}</p>
     <a href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
     LinkedIn-profiel ↗</a></header>
@@ -280,6 +281,7 @@ def contact_detail(url: str):
     {conversations} gesprekken · {received} ontvangen · {sent} overige</p>
     <p>Laatste LinkedIn-bericht: {escape(last)}</p></section>
     """
+    page += contact_timeline(history, employment)
     page += """<section><h2>Werkhistorie (waargenomen)</h2>
     <p class="muted">Datums geven aan wanneer Network Search een functie
     voor het eerst in een LinkedIn-export zag, niet de echte startdatum.</p>"""
@@ -300,3 +302,31 @@ def contact_detail(url: str):
                  f"<h3>{escape(msg['subject'] or '(geen onderwerp)')}</h3>"
                  f"<pre>{escape(msg['content'] or '')}</pre></article>")
     return page + "</section>" + footer() + "</html>"
+
+
+@app.get("/activity", response_class=HTMLResponse)
+def activity_page():
+    with connect() as db:
+        overview = network_activity(db)
+    page = """<!doctype html><html lang="nl"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Netwerkactiviteit · Network Search</title>
+    <style>
+    :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
+    *{box-sizing:border-box}
+    body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}
+    h1,h2,h3{line-height:1.25;letter-spacing:-.035em}
+    h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}
+    a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
+    header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}
+    .brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}
+    section{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}
+    article{padding:14px 0;border-top:1px solid var(--edge)}
+    .muted,small{color:var(--muted)}
+    </style>
+    <header><span class="brand">Elegant Chaos / Labs</span>
+    <h1>Netwerkactiviteit</h1>
+    <nav style="margin-top:16px"><a href="/">⌂ Home</a> ·
+    <a href="/activity" aria-current="page">Netwerkactiviteit</a></nav>
+    </header>"""
+    return page + overview + footer() + "</html>"
