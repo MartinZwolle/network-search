@@ -14,6 +14,7 @@ from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
+from app.context import migrate as migrate_context, save as save_context
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
@@ -21,7 +22,7 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"
 
 
 def footer():
@@ -66,6 +67,7 @@ with connect() as _db:
     migrate_instagram(_db)
     migrate_identities(_db)
     migrate_person_ids(_db)
+    migrate_context(_db)
     sync_person_ids(_db)
 
 
@@ -300,7 +302,7 @@ article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
-</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Farley File</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a></nav></header>
+</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Farley File</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
@@ -429,6 +431,83 @@ def person_by_id(person_id: int, find: str = ""):
                               find=find, footer=footer,
                               contact_timeline=contact_timeline,
                               profile_key=profile_key)
+
+
+@app.post("/person/{person_id}/context")
+def update_person_context(person_id: int, how_known: str = Form(""),
+                          background: str = Form(""), interests: str = Form(""),
+                          remember: str = Form(""), network_tags: str = Form("")):
+    with connect() as db:
+        try:
+            save_context(db, person_id, how_known=how_known,
+                         background=background, interests=interests,
+                         remember=remember, network_tags=network_tags)
+            current_id = person_details(db, person_id)[0]
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(current_id), status_code=303)
+
+
+@app.get("/tags", response_class=HTMLResponse)
+def tag_overview():
+    with connect() as db:
+        rows = db.execute(
+            "SELECT tag,COUNT(*) AS total FROM farley_tags GROUP BY tag ORDER BY total DESC,tag"
+        ).fetchall()
+    html = """<!doctype html><html lang="nl"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Netwerktags · Farley File</title>
+    <style>
+    body{font:16px/1.65 system-ui,sans-serif;max-width:1000px;margin:0 auto;
+      padding:38px 24px;background:#f5f7f6;color:#252b30}
+    a{color:#087f80}section{background:white;border:1px solid #dde6e5;
+      padding:22px;margin:20px 0;border-radius:5px}
+    .tag{display:inline-block;margin:6px;padding:8px 12px;background:#e4f3f0;border-radius:4px}
+    </style><header><h1>Netwerktags</h1><nav><a href="/">⌂ Home</a> ·
+    <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> ·
+    <a href="/tags">Netwerktags</a></nav></header><section>
+    <p>Een persoon kan meerdere tags hebben. Groepen mogen elkaar overlappen.</p>"""
+    if not rows:
+        html += '<p>Nog geen tags. Voeg er een toe op een persoonspagina.</p>'
+    for row in rows:
+        html += (f'<a class="tag" href="/tags/{quote(row["tag"],safe="")}">'
+                 f'#{escape(row["tag"])} ({row["total"]})</a>')
+    return html + "</section>" + footer() + "</html>"
+
+
+@app.get("/tags/{tag}", response_class=HTMLResponse)
+def tag_members(tag: str):
+    with connect() as db:
+        members = db.execute(
+            """SELECT DISTINCT t.person_id FROM farley_tags t
+               WHERE t.tag=? COLLATE NOCASE ORDER BY t.person_id""", (tag,)
+        ).fetchall()
+        items = []
+        for member in members:
+            info = person_details(db, member["person_id"])
+            if not info:
+                continue
+            pid, accounts = info
+            linked = next((a["account_key"] for a in accounts if a["platform"]=="linkedin"), "")
+            insta = next((a["account_key"] for a in accounts if a["platform"]=="instagram"), "")
+            name = ""
+            if linked:
+                row = db.execute("SELECT first_name,last_name FROM contacts WHERE url=?", (linked,)).fetchone()
+                if row:
+                    name = " ".join(filter(None, (row["first_name"], row["last_name"])))
+            items.append((pid, name or "@" + insta))
+    html = ("""<!doctype html><html lang="nl"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Netwerktag · Farley File</title>
+    <style>body{font:16px/1.65 system-ui,sans-serif;max-width:1000px;margin:0 auto;
+    padding:38px 24px;background:#f5f7f6;color:#252b30}a{color:#087f80}
+    section{background:white;border:1px solid #dde6e5;padding:22px;margin:20px 0}
+    article{padding:12px 0;border-top:1px solid #dde6e5}</style>"""
+    + f'<p><a href="/tags">← Alle netwerktags</a></p><h1>#{escape(tag)}</h1>'
+    + f'<section><p>{len(items)} personen</p>')
+    for pid, name in sorted(set(items), key=lambda x:x[1].casefold()):
+        html += f'<article><a href="/person/{pid}">{escape(name)}</a></article>'
+    return html + "</section>" + footer() + "</html>"
 
 
 @app.post("/obsidian-note/add")
