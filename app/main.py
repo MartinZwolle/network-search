@@ -177,20 +177,20 @@ def index(q: str = "", imported: int = 0):
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Network Search</title><style>
-:root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
-*{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}
-h1,h2,h3{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}h2{font-size:1.45rem}
-a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
-header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}
-.brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}
-section{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}
-input[type=text]{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}
-button{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}
-button:hover{filter:brightness(.9)}article{padding:16px 0;border-top:1px solid var(--edge)}
-article strong{font-size:1.08rem}small,.muted{color:var(--muted)}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
-.badge{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}
-@media(max-width:550px){input[type=text]{width:100%;margin-bottom:10px}button{width:100%}}
+:root{{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}}
+*{{box-sizing:border-box}}body{{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}}
+h1,h2,h3{{line-height:1.25;letter-spacing:-.035em}}h1{{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}}h2{{font-size:1.45rem}}
+a{{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}}
+header{{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}}
+.brand{{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}}
+section{{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}}
+input[type=text]{{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}}
+button{{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}}
+button:hover{{filter:brightness(.9)}}article{{padding:16px 0;border-top:1px solid var(--edge)}}
+article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
+pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
+.badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
+@media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
 </style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span></header>
     <p>{total_contacts} contacten · {total_messages} berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
