@@ -241,6 +241,18 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
                 JOIN messages m ON m.message_key=f.message_key
                 WHERE messages_fts MATCH ? ORDER BY bm25(messages_fts, 0.0, 3.0, 1.0) LIMIT 50""",
                 (query_expression(q),)).fetchall()
+        # Allow a compact Instagram handle to also find a LinkedIn name.
+        compact_query = compact(q)
+        if compact_query and len(compact_query) >= 4:
+            known_urls = {r["url"] for r in contacts}
+            for row in db.execute("""SELECT c.*, (SELECT COUNT(*) FROM contact_messages cm
+                        WHERE cm.contact_url=c.url) AS message_count FROM contacts c"""):
+                full_name = (row["first_name"] or "") + (row["last_name"] or "")
+                if row["url"] not in known_urls and compact_query in compact(full_name):
+                    contacts.append(row)
+                    known_urls.add(row["url"])
+                    if len(contacts) >= 100:
+                        break
         suggestions = identity_candidates(db, contacts, ig_results) if q.strip() else []
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
