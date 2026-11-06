@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, quote
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
@@ -22,6 +23,7 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 APP_VERSION = "0.8.0"
 
 
@@ -287,12 +289,12 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
         people_results = merged_contacts(db, contacts, ig_results) if q.strip() else []
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Farley File</title><style>
+    <title>Farley File</title><link rel="icon" type="image/svg+xml" href="/static/farley-logo.svg"><style>
 :root{{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}}
 *{{box-sizing:border-box}}body{{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}}
 h1,h2,h3{{line-height:1.25;letter-spacing:-.035em}}h1{{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}}h2{{font-size:1.45rem}}
 a{{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}}
-header{{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}}
+header{{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}}\n.app-heading{{display:flex;align-items:center;gap:18px;margin-top:8px}}.app-heading h1{{margin:0}}.app-logo{{width:clamp(64px,10vw,88px);height:auto;border-radius:15px;flex-shrink:0}}
 .brand{{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}}
 section{{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}}
 input[type=text]{{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}}
@@ -302,7 +304,7 @@ article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
-</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Farley File</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
+</style><header><span class="brand">Elegant Chaos / Labs</span><div class="app-heading"><img class="app-logo" src="/static/farley-logo.svg" alt="" width="82" height="82"><h1>Farley File</h1></div><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
