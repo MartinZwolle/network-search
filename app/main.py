@@ -6,6 +6,7 @@ import re
 import sqlite3
 from html import escape
 from pathlib import Path
+from urllib.parse import urlsplit, quote
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -35,10 +36,45 @@ def initialize():
           fts5(url UNINDEXED, name, company, position);
         CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING
           fts5(message_key UNINDEXED, subject, content);
+        CREATE TABLE IF NOT EXISTS contact_messages (
+          contact_url TEXT NOT NULL, message_key TEXT NOT NULL,
+          PRIMARY KEY(contact_url, message_key));
+        CREATE INDEX IF NOT EXISTS idx_contact_messages_message
+          ON contact_messages(message_key);
         """)
 
 
 initialize()
+
+
+def profile_key(url):
+    """Use LinkedIn member paths as stable keys, ignoring host and query."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    path = urlsplit(url if "://" in url else "https://" + url).path
+    path = path.rstrip("/").lower()
+    return path if path.startswith("/in/") else ""
+
+
+def rebuild_links(db):
+    lookup = {}
+    for row in db.execute("SELECT url FROM contacts"):
+        key = profile_key(row["url"])
+        if key:
+            lookup.setdefault(key, row["url"])
+    db.execute("DELETE FROM contact_messages")
+    for row in db.execute("SELECT message_key, sender_url, recipient_urls FROM messages"):
+        urls = [row["sender_url"]] + re.split(r"[,;\\s]+", row["recipient_urls"] or "")
+        keys = {profile_key(url) for url in urls}
+        for key in keys:
+            if key in lookup:
+                db.execute("INSERT OR IGNORE INTO contact_messages VALUES (?, ?)",
+                           (lookup[key], row["message_key"]))
+
+
+with connect() as _db:
+    rebuild_links(_db)
 
 
 def value(row, *names):
@@ -118,6 +154,7 @@ async def upload(file: UploadFile = File(...)):
             db.execute("DELETE FROM messages_fts")
             db.execute("""INSERT INTO messages_fts
                         SELECT message_key, subject, content FROM messages""")
+        rebuild_links(db)
     return RedirectResponse("/?imported=" + str(count), status_code=303)
 
 
@@ -140,16 +177,21 @@ def index(q: str = "", imported: int = 0):
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Network Search</title><style>
-    body{{font:16px system-ui;max-width:960px;margin:40px auto;padding:0 20px;
-         background:#f7f8fa;color:#20252b}}
-    section{{background:white;padding:22px;margin:20px 0;border-radius:12px;
-             box-shadow:0 2px 12px #0001}}
-    input[type=text]{{padding:12px;width:75%;max-width:650px}}
-    button{{padding:12px;cursor:pointer}}
-    article{{padding:12px 0;border-top:1px solid #ddd}}
-    small{{color:#555}}
-    pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
-    </style><h1>Network Search</h1>
+:root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
+*{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}
+h1,h2,h3{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}h2{font-size:1.45rem}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
+header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}
+.brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}
+section{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}
+input[type=text]{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}
+button{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}
+button:hover{filter:brightness(.9)}article{padding:16px 0;border-top:1px solid var(--edge)}
+article strong{font-size:1.08rem}small,.muted{color:var(--muted)}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+.badge{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}
+@media(max-width:550px){input[type=text]{width:100%;margin-bottom:10px}button{width:100%}}
+</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span></header>
     <p>{total_contacts} contacten · {total_messages} berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     <section><h2>Zoeken</h2><form method="get">
@@ -170,6 +212,7 @@ def index(q: str = "", imported: int = 0):
                      f'{escape(contact["last_name"] or "")}</strong><br>'
                      f'{escape(contact["position"] or "")} · '
                      f'{escape(contact["company"] or "")}<br>'
+                     f'<a href="/contact?url={quote(contact["url"], safe="")}">Gesprekken bekijken</a> · ' 
                      f'<a href="{url}" target="_blank" rel="noopener noreferrer">'
                      'LinkedIn-profiel</a></article>')
         page += f"</section><section><h2>Berichten ({len(messages)} getoond)</h2>"
@@ -180,3 +223,43 @@ def index(q: str = "", imported: int = 0):
                      f'<pre>{escape((message["content"] or "")[:700])}</pre></article>')
         page += "</section>"
     return page + "</html>"
+
+
+@app.get("/contact", response_class=HTMLResponse)
+def contact_detail(url: str):
+    with connect() as db:
+        contact = db.execute("SELECT * FROM contacts WHERE url=?", (url,)).fetchone()
+        if contact is None:
+            raise HTTPException(404, "Contact niet gevonden")
+        history = db.execute("""
+            SELECT m.* FROM contact_messages cm
+            JOIN messages m ON m.message_key=cm.message_key
+            WHERE cm.contact_url=?
+            ORDER BY m.date DESC
+        """, (url,)).fetchall()
+    name = " ".join(filter(None, (contact["first_name"], contact["last_name"])))
+    received = sum(profile_key(m["sender_url"]) == profile_key(url) for m in history)
+    sent = len(history) - received
+    conversations = len({m["conversation_id"] for m in history if m["conversation_id"]})
+    last = history[0]["date"] if history else "Geen berichten gevonden"
+    page = """<!doctype html><html lang="nl"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Contact · Network Search</title>""" + "<style>\n:root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}\n*{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}\nh1,h2,h3{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}h2{font-size:1.45rem}\na{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}\nheader{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}\n.brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}\nsection{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}\ninput[type=text]{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}\nbutton{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}\nbutton:hover{filter:brightness(.9)}article{padding:16px 0;border-top:1px solid var(--edge)}\narticle strong{font-size:1.08rem}small,.muted{color:var(--muted)}\npre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}\n.badge{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}\n@media(max-width:550px){input[type=text]{width:100%;margin-bottom:10px}button{width:100%}}\n</style>" + f"""
+    <p><a href="/">← Terug naar zoeken</a></p>
+    <header><span class="brand">Elegant Chaos / Labs</span>
+    <h1>{escape(name)}</h1><p>{escape(contact["position"] or "")} ·
+    {escape(contact["company"] or "")}</p>
+    <a href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
+    LinkedIn-profiel ↗</a></header>
+    <section><h2>Contactgeschiedenis</h2>
+    <p><span class="badge">{len(history)} berichten</span> ·
+    {conversations} gesprekken · {received} ontvangen · {sent} overige</p>
+    <p>Laatste LinkedIn-bericht: {escape(last)}</p></section>
+    <section><h2>Berichten</h2>"""
+    for msg in history:
+        direction = "Ontvangen" if profile_key(msg["sender_url"]) == profile_key(url) else "Verzonden / groepsbericht"
+        page += (f"<article><small>{escape(msg['date'] or '')} · {direction} · "
+                 f"{escape(msg['sender'] or '')}</small>"
+                 f"<h3>{escape(msg['subject'] or '(geen onderwerp)')}</h3>"
+                 f"<pre>{escape(msg['content'] or '')}</pre></article>")
+    return page + "</section></html>"
