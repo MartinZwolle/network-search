@@ -2,12 +2,13 @@
 
 Een lichte, zelfgehoste zoekmachine voor je LinkedIn-netwerk. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.3.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.3.2** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
 ## Mogelijkheden
 
 - **LinkedIn-connecties importeren** uit `Connections.csv` (naam, functie, werkgever, profiel-URL).
 - **Berichten importeren** uit `messages.csv`, inclusief doorzoekbare inhoud.
+- **Werkhistorie bijhouden:** bij een volgende LinkedIn-import worden wijzigingen in werkgever en/of functie opgeslagen, zonder de eerdere vermelding te wissen. De datum is de eerste waarneming in een export, **niet** de echte startdatum van een baan. Ontbrekende velden worden niet als wijziging geteld.
 - **Contactgeschiedenis bekijken:** klik op *Gesprekken bekijken (6)* om gekoppelde berichten te openen.
 - **Slimmer zoeken:** bekende termen worden uitgebreid met synoniemen in het Nederlands en Engels. Bijvoorbeeld `IT manager overheid` zoekt ook naar verwante functietitels en overheidsorganisaties. De zoekopdracht combineert begrippen met AND; synoniemen binnen een begrip met OR.
 - **Gerangschikte resultaten** op basis van full-text-relevantie.
@@ -42,6 +43,8 @@ Open de app en klap onder de zoekresultaten **CSV importeren** uit. Upload de be
 
 De importer ondersteunt gebruikelijke LinkedIn-CSV-encodings; bestanden mogen maximaal **25 MB per upload** zijn. De ruwe uploadbestanden worden niet als losse bestanden opgeslagen. Geïmporteerde persoonsgegevens en berichtinhoud staan in `data/network.db` op de Docker-host.
 
+Bij een upgrade naar v0.3.2 worden reeds geïmporteerde werkgevers en functies als eerste bekende observatie geregistreerd. Maak vóór een update of nieuwe import een back-up van `data/network.db`. Opnieuw uploaden van dezelfde export maakt geen extra werkhistorie-items aan.
+
 Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling tussen contacten en gesprekken gebeurt op basis van LinkedIn-profiel-URL. Groepsgesprekken kunnen meerdere contacten bevatten.
 
 ## Privacy en beveiliging
@@ -56,6 +59,7 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [x] Contacten koppelen aan LinkedIn-berichten
 - [x] Berichtenaantal per contact en contactgeschiedenis
 - [x] NL/EN-synoniemen en relevantere sortering
+- [x] Werkgever- en functiehistorie vastleggen bij nieuwe LinkedIn-exports
 - [ ] Relatieanalyse: frequentie, laatste contact, wederkerigheid
 - [ ] Facebook- en Instagram-export ondersteunen
 - [ ] Accounts van dezelfde persoon veilig koppelen (met handmatige bevestiging)
