@@ -11,13 +11,14 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
+from app.instagram import migrate as migrate_instagram, import_archive
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 
 
 def footer():
@@ -59,6 +60,7 @@ def initialize():
 initialize()
 with connect() as _db:
     migrate_employment(_db)
+    migrate_instagram(_db)
 
 
 def profile_key(url):
@@ -171,11 +173,34 @@ async def upload(file: UploadFile = File(...)):
     return RedirectResponse("/?imported=" + str(count), status_code=303)
 
 
+@app.post("/upload-instagram")
+async def upload_instagram(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(400, "Selecteer de officiële Instagram ZIP-export")
+    content = await file.read(80 * 1024 * 1024 + 1)
+    try:
+        with connect() as db:
+            counts = import_archive(db, content)
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse(
+        "/?ig_imported=" + str(counts["inbox_messages"]), status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
-def index(q: str = "", imported: int = 0):
+def index(q: str = "", imported: int = 0, ig_imported: int = -1):
     with connect() as db:
         total_contacts = db.execute("SELECT count(*) FROM contacts").fetchone()[0]
         total_messages = db.execute("SELECT count(*) FROM messages").fetchone()[0]
+        ig_accounts = db.execute("SELECT count(*) FROM instagram_accounts WHERE follows=1 OR follower=1").fetchone()[0]
+        ig_messages_total = db.execute("SELECT count(*) FROM instagram_messages").fetchone()[0]
+        ig_results = []
+        ig_message_results = []
+        if q.strip():
+            # Instagram usernames and message text are separate from LinkedIn identities.
+            like = "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            ig_results = db.execute("SELECT * FROM instagram_accounts WHERE username LIKE ? ESCAPE '\\' LIMIT 50", (like,)).fetchall()
+            ig_message_results = db.execute("SELECT * FROM instagram_messages WHERE content LIKE ? ESCAPE '\\' LIMIT 30", (like,)).fetchall()
         contacts = []
         messages = []
         if query_expression(q):
@@ -206,8 +231,9 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
 </style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a></nav></header>
-    <p>{total_contacts} contacten · {total_messages} berichten</p>
+    <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
+    {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
     <section><h2>Zoeken</h2><form method="get">
     <input name="q" type="text" value="{escape(q, quote=True)}"
            placeholder="Naam, werkgever, functie of gesprek">
@@ -235,6 +261,21 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'{escape(message["sender"] or "")}</small>'
                      f'<pre>{escape((message["content"] or "")[:700])}</pre></article>')
         page += "</section>"
+        page += f'<section><h2>Instagram-accounts ({len(ig_results)} getoond)</h2>'
+        for account in ig_results:
+            username = escape(account["username"])
+            page += (f'<article><strong>@{username}</strong><br>'
+                     f'<small>{"Jij volgt dit account" if account["follows"] else ""}'
+                     f'{" · " if account["follows"] and account["follower"] else ""}'
+                     f'{"Volgt jou" if account["follower"] else ""}</small><br>'
+                     f'<a href="https://www.instagram.com/{quote(account["username"], safe="")}/" '
+                     f'target="_blank" rel="noopener noreferrer">Instagram-profiel</a></article>')
+        page += f'</section><section><h2>Instagram-berichten ({len(ig_message_results)} getoond)</h2>'
+        for msg in ig_message_results:
+            page += (f'<article><strong>{escape(msg["sender"])}</strong> '
+                     f'<small>{escape(msg["date"][:10])}</small>'
+                     f'<pre>{escape(msg["content"][:700])}</pre></article>')
+        page += "</section>"
     page += """<details style="margin-top:32px;background:#fff;border:1px solid #dde6e5;
         padding:18px 24px;border-radius:5px">
         <summary style="cursor:pointer;color:#087f80;font-weight:700">CSV importeren</summary>
@@ -242,7 +283,14 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
         Alle gegevens blijven op je eigen server.</p>
         <form action="/upload" method="post" enctype="multipart/form-data">
         <input type="file" name="file" accept=".csv" required>
-        <button>Importeer</button></form></details>"""
+        <button>Importeer</button></form>
+        <hr style="border:0;border-top:1px solid #dde6e5;margin:24px 0">
+        <p><strong>Instagram-export (ZIP)</strong></p>
+        <p>Alleen volgers, gevolgde accounts en gewone inbox-tekstberichten.
+        Verzoeken, gesynchroniseerde telefooncontacten, broadcasts en media worden overgeslagen.</p>
+        <form action="/upload-instagram" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".zip" required>
+        <button>Importeer Instagram</button></form></details>"""
     return page + footer() + "</html>"
 
 
