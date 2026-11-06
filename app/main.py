@@ -9,12 +9,13 @@ from pathlib import Path
 from urllib.parse import urlsplit, quote
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from app.search import query_expression, expanded_query
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.2.2"
+APP_VERSION = "0.3.0"
 
 
 def footer():
@@ -111,12 +112,6 @@ def parse_csv(raw):
     return list(csv.DictReader(io.StringIO("".join(lines[header:]))))
 
 
-def query_expression(query):
-    terms = re.findall(r"[\wÀ-ÿ]+", query)
-    return " AND ".join('"' + term.replace('"', "") + '"*'
-                        for term in terms[:12])
-
-
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".csv"):
@@ -178,11 +173,11 @@ def index(q: str = "", imported: int = 0):
             contacts = db.execute("""SELECT c.*, (SELECT COUNT(*) FROM contact_messages cm
                          WHERE cm.contact_url=c.url) AS message_count
                 FROM contacts_fts f JOIN contacts c ON c.url=f.url
-                WHERE contacts_fts MATCH ? LIMIT 100""",
+                WHERE contacts_fts MATCH ? ORDER BY bm25(contacts_fts, 0.0, 8.0, 3.0, 5.0) LIMIT 100""",
                 (query_expression(q),)).fetchall()
             messages = db.execute("""SELECT m.* FROM messages_fts f
                 JOIN messages m ON m.message_key=f.message_key
-                WHERE messages_fts MATCH ? LIMIT 50""",
+                WHERE messages_fts MATCH ? ORDER BY bm25(messages_fts, 0.0, 3.0, 1.0) LIMIT 50""",
                 (query_expression(q),)).fetchall()
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -207,7 +202,12 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     <section><h2>Zoeken</h2><form method="get">
     <input name="q" type="text" value="{escape(q, quote=True)}"
            placeholder="Naam, werkgever, functie of gesprek">
-    <button>Zoek</button></form></section>"""
+    <button>Zoek</button></form>
+    <p class="muted" style="font-size:.9rem">Zoek ook in het Nederlands of Engels:
+    bijvoorbeeld <em>IT manager overheid</em>, <em>security</em> of <em>Kubernetes</em>.</p>
+    </section>"""
+    if q.strip() and expanded_query(q):
+        page += '<p class="muted">Zoektermen uitgebreid met verwante functietitels en vaktermen (NL/EN). Dit is trefwoordzoeken, geen AI.</p>'
     if q.strip():
         page += f"<section><h2>Contacten ({len(contacts)} getoond)</h2>"
         for contact in contacts:
