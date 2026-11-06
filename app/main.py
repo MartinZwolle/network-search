@@ -279,7 +279,7 @@ def contact_detail(url: str):
     <p><span class="badge">{len(history)} berichten</span> ·
     {conversations} gesprekken · {received} ontvangen · {sent} overige</p>
     <p>Laatste LinkedIn-bericht: {escape(last)}</p></section>
-    <section><h2>Berichten</h2>"""
+    """
     page += """<section><h2>Werkhistorie (waargenomen)</h2>
     <p class="muted">Datums geven aan wanneer Network Search een functie
     voor het eerst in een LinkedIn-export zag, niet de echte startdatum.</p>"""
@@ -292,7 +292,7 @@ def contact_detail(url: str):
                      f"{escape(job['first_seen_at'][:10])}</small></article>")
     else:
         page += "<p>Er zijn nog geen functies geregistreerd.</p>"
-    page += "</section>"
+    page += "</section><section><h2>Berichten</h2>"
     for msg in history:
         direction = "Ontvangen" if profile_key(msg["sender_url"]) == profile_key(url) else "Verzonden / groepsbericht"
         page += (f"<article><small>{escape(msg['date'] or '')} · {direction} · "
