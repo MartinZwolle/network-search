@@ -3,6 +3,8 @@ import unittest
 
 from app.identities import migrate as migrate_identities, link
 from app.people import merged_contacts, profile, profile_url
+from app.context import migrate as migrate_context
+from app.manual import migrate as migrate_manual
 from app.person_ids import migrate as migrate_people, sync as sync_people, details as person_details, account_person, add_note
 
 
@@ -34,6 +36,8 @@ class PeopleTests(unittest.TestCase):
         """)
         migrate_identities(self.db)
         migrate_people(self.db)
+        migrate_context(self.db)
+        migrate_manual(self.db)
         sync_people(self.db)
 
     def linkedin_search_rows(self):
