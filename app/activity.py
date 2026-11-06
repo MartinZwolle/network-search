@@ -18,7 +18,8 @@ def parse_date(value):
     if not text:
         return None
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
     except ValueError:
         pass
     for fmt in DATE_FORMATS:
