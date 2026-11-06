@@ -12,14 +12,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
-from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles
+from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.5.2"
 
 
 def footer():
@@ -191,7 +191,7 @@ async def upload_instagram(file: UploadFile = File(...)):
 
 @app.post("/profile-link")
 def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(...),
-                 action: str = Form("link")):
+                 action: str = Form("link"), source: str = Form("contact")):
     with connect() as db:
         try:
             if action == "unlink":
@@ -202,7 +202,8 @@ def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(.
                 raise HTTPException(400, "Onbekende actie")
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-    return RedirectResponse("/contact?url=" + quote(linkedin_url, safe=""), status_code=303)
+    destination = "/matches" if source == "matches" else "/contact?url=" + quote(linkedin_url, safe="")
+    return RedirectResponse(destination, status_code=303)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -271,7 +272,7 @@ article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
-</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a></nav></header>
+</style><header><span class="brand">Elegant Chaos / Labs</span><h1>Network Search</h1><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a></nav></header>
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
@@ -444,6 +445,72 @@ def activity_page():
     <header><span class="brand">Elegant Chaos / Labs</span>
     <h1>Netwerkactiviteit</h1>
     <nav style="margin-top:16px"><a href="/">⌂ Home</a> ·
-    <a href="/activity" aria-current="page">Netwerkactiviteit</a></nav>
+    <a href="/activity" aria-current="page">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a></nav>
     </header>"""
     return page + overview + footer() + "</html>"
+
+
+@app.get("/matches", response_class=HTMLResponse)
+def possible_matches(page: int = 1):
+    with connect() as db:
+        suggestions = all_candidates(db)
+        linked_count = db.execute("SELECT COUNT(*) FROM profile_links").fetchone()[0]
+    page_size = 30
+    total = len(suggestions)
+    max_page = max(1, (total + page_size - 1) // page_size)
+    page = min(max(1, page), max_page)
+    visible = suggestions[(page - 1) * page_size:page * page_size]
+    html = """<!doctype html><html lang="nl"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mogelijke koppelingen · Network Search</title>
+    <style>
+    :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
+    *{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;
+    max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}
+    h1,h2{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}
+    a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
+    header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}
+    .brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}
+    section{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;
+    border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}
+    article{padding:18px 0;border-top:1px solid var(--edge)}
+    .muted,small{color:var(--muted)}
+    button{background:var(--accent);color:white;border:0;padding:11px 16px;
+    border-radius:4px;font:inherit;font-weight:700;cursor:pointer;margin-top:9px}
+    </style>
+    <header><span class="brand">Elegant Chaos / Labs</span>
+    <h1>Mogelijke koppelingen</h1>
+    <nav style="margin-top:16px"><a href="/">⌂ Home</a> ·
+    <a href="/activity">Netwerkactiviteit</a> ·
+    <a href="/matches" aria-current="page">Mogelijke koppelingen</a></nav>
+    </header>"""
+    html += (f'<section><h2>{total} mogelijke koppelingen</h2>'
+             f'<p>{linked_count} profielen al handmatig gekoppeld.</p>'
+             '<p class="muted">Alleen exacte overeenkomsten tussen een volledige '
+             'LinkedIn-naam zonder spaties en een Instagram-gebruikersnaam. '
+             'Dit is een aanwijzing, geen bewijs dat het dezelfde persoon is. '
+             'Controleer beide profielen voordat je koppelt.</p>')
+    if not visible:
+        html += '<p>Geen nieuwe suggesties gevonden.</p>'
+    for contact, username in visible:
+        name = escape(" ".join(filter(None, [contact["first_name"], contact["last_name"]])))
+        ig_url = "https://www.instagram.com/" + quote(username, safe="") + "/"
+        html += (f'<article><strong>{name}</strong><br>'
+                 f'<small>{escape(contact["position"] or "")} · '
+                 f'{escape(contact["company"] or "")}</small><br>'
+                 f'<a href="{escape(contact["url"], quote=True)}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>'
+                 f' · <a href="{ig_url}" target="_blank" rel="noopener noreferrer">'
+                 f'Instagram @{escape(username)} ↗</a>'
+                 f'<form action="/profile-link" method="post">'
+                 f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
+                 f'<input type="hidden" name="instagram_username" value="{escape(username, quote=True)}">'
+                 f'<input type="hidden" name="source" value="matches">'
+                 f'<button type="submit">Zelfde persoon — koppelen</button></form></article>')
+    html += '</section><p>'
+    if page > 1:
+        html += f'<a href="/matches?page={page-1}">← Vorige</a> · '
+    html += f'Pagina {page} van {max_page}'
+    if page < max_page:
+        html += f' · <a href="/matches?page={page+1}">Volgende →</a>'
+    html += '</p>'
+    return html + footer() + '</html>'
