@@ -9,6 +9,7 @@ from urllib.parse import quote
 from fastapi import HTTPException
 from app.person_ids import account_person, details as person_details
 from app.context import get as get_context, person_tags
+from app.manual import display_name as farley_display_name, employment as farley_employment
 
 CSS = """
 :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
@@ -39,30 +40,31 @@ def linked_owner(db, username):
 
 
 def merged_contacts(db, linkedin_results, instagram_results):
-    """Return one entry per identified person, whatever source matched."""
-    output = []
-    seen = set()
-    for person in linkedin_results:
-        url = person["url"]
-        if url not in seen:
-            seen.add(url)
-            output.append(("linkedin", person))
+    """One search result per confirmed person ID."""
+    output, seen = [], set()
+    for contact in linkedin_results:
+        pid = account_person(db, "linkedin", contact["url"])
+        if pid is not None and pid not in seen:
+            output.append(("linkedin", contact))
+            seen.add(pid)
     for account in instagram_results:
-        username = account["username"]
-        url = linked_owner(db, username)
-        if url:
-            if url not in seen:
-                person = db.execute(
-                    """SELECT c.*, (SELECT count(*) FROM contact_messages cm
-                        WHERE cm.contact_url=c.url) AS message_count
-                        FROM contacts c WHERE c.url=?""", (url,)
-                ).fetchone()
-                if person:
-                    seen.add(url)
-                    output.append(("linkedin", person))
-                    continue
-        else:
-            output.append(("instagram", account))
+        pid = account_person(db, "instagram", account["username"])
+        if pid is None or pid in seen:
+            continue
+        info = person_details(db, pid)
+        linked = next((a["account_key"] for a in info[1] if a["platform"] == "linkedin"), None)
+        if linked:
+            row = db.execute(
+                """SELECT c.*, (SELECT count(*) FROM contact_messages cm
+                   WHERE cm.contact_url=c.url) AS message_count
+                   FROM contacts c WHERE c.url=?""", (linked,)
+            ).fetchone()
+            if row:
+                output.append(("linkedin", row))
+                seen.add(pid)
+                continue
+        output.append(("instagram", account))
+        seen.add(pid)
     return output
 
 
@@ -75,8 +77,8 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
         person_id, stored_accounts = info
         linkedin_url = next((r["account_key"] for r in stored_accounts if r["platform"] == "linkedin"), "")
         instagram_username = next((r["account_key"] for r in stored_accounts if r["platform"] == "instagram"), "")
-    if not linkedin_url and not instagram_username:
-        raise HTTPException(400, "Selecteer een LinkedIn- of Instagram-account")
+    if not linkedin_url and not instagram_username and person_id is None:
+        raise HTTPException(400, "Selecteer een persoon")
     if instagram_username:
         username = instagram_username.strip().lstrip("@").casefold()
         owner = linked_owner(db, username)
@@ -88,7 +90,7 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
     if linkedin_url and contact is None:
         raise HTTPException(404, "LinkedIn-contact niet gevonden")
     standalone = None
-    if contact is None:
+    if contact is None and instagram_username:
         standalone = db.execute(
             "SELECT * FROM instagram_accounts WHERE username=?", (username,)
         ).fetchone()
@@ -98,13 +100,14 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
         """SELECT a.* FROM profile_links l JOIN instagram_accounts a
            ON a.username=l.instagram_username
            WHERE l.linkedin_url=? ORDER BY a.username""", (linkedin_url,)
-    ).fetchall() if contact is not None else [standalone]
+    ).fetchall() if contact is not None else ([standalone] if standalone is not None else [])
 
     if person_id is None:
         person_id = (account_person(db, "linkedin", linkedin_url) if contact is not None
                      else account_person(db, "instagram", standalone["username"]))
-    name = (" ".join(filter(None, [contact["first_name"], contact["last_name"]]))
-            if contact is not None else "@" + standalone["username"])
+    name = (farley_display_name(db, person_id) if person_id is not None else
+            " ".join(filter(None, [contact["first_name"], contact["last_name"]])) if contact is not None else
+            "@" + standalone["username"])
     nav = ('<a href="/">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a>'
            ' · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a>')
     html = ('<!doctype html><html lang="nl"><meta charset="utf-8">'
