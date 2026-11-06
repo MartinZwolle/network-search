@@ -241,3 +241,54 @@ def transfer_person_data(db, source, dest):
         db.execute("UPDATE farley_person_names SET person_id=? WHERE person_id=?", (dest, source))
     db.execute("UPDATE farley_manual_jobs SET person_id=? WHERE person_id=?", (dest, source))
     db.execute("UPDATE farley_job_overrides SET person_id=? WHERE person_id=?", (dest, source))
+
+
+def possible_duplicates(db, name, exclude_id=None, limit=10):
+    """Only exact normalized full-name matches; suggestions, never automatic identity decisions."""
+    normalized = " ".join((name or "").casefold().split())
+    if len(normalized) < 2:
+        return []
+    from app.person_ids import resolve
+    seen = set()
+    matches = []
+    for row in db.execute(
+        """SELECT p.id FROM farley_people p
+           WHERE NOT EXISTS(SELECT 1 FROM farley_aliases a WHERE a.old_id=p.id)
+           ORDER BY p.id"""
+    ):
+        pid = resolve(db, row["id"])
+        if pid == exclude_id or pid in seen:
+            continue
+        seen.add(pid)
+        label = display_name(db, pid)
+        if " ".join(label.casefold().split()) == normalized:
+            accounts = db.execute(
+                "SELECT platform FROM farley_accounts WHERE person_id=?", (pid,)
+            ).fetchall()
+            matches.append({"id": pid, "name": label,
+                            "platforms": ", ".join(sorted({a["platform"] for a in accounts}))})
+            if len(matches) >= limit:
+                break
+    return matches
+
+
+def delete_person(db, person_id):
+    """Only explicitly manual, unlinked profiles; never delete imported identities."""
+    info = details(db, person_id)
+    if info is None or info[0] != person_id:
+        raise ValueError("Persoon niet gevonden")
+    if info[1]:
+        raise ValueError("Ontkoppel eerst sociale accounts; geïmporteerde profielen verwijderen we niet")
+    row = db.execute(
+        "SELECT created_manually FROM farley_person_names WHERE person_id=?", (person_id,)
+    ).fetchone()
+    if row is None or row["created_manually"] != 1:
+        raise ValueError("Alleen handmatig aangemaakte personen zijn te verwijderen")
+    if db.execute("SELECT 1 FROM farley_aliases WHERE current_id=? LIMIT 1",
+                  (person_id,)).fetchone():
+        raise ValueError("Dit profiel heeft oudere permanente links en kan niet worden verwijderd")
+    # Remove only data specifically owned by this standalone manual person.
+    for table in ("farley_notes", "farley_context", "farley_tags",
+                  "farley_manual_jobs", "farley_job_overrides", "farley_person_names"):
+        db.execute(f"DELETE FROM {table} WHERE person_id=?", (person_id,))
+    db.execute("DELETE FROM farley_people WHERE id=?", (person_id,))
