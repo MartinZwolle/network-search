@@ -2,11 +2,12 @@
 
 Een lichte, zelfgehoste zoekmachine voor je LinkedIn-netwerk. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.5.1** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.5.2** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
 ## Mogelijkheden
 
 - **Instagram ZIP-import:** officiële JSON-export in één keer uploaden. Alleen volgers, gevolgde accounts en normale inbox-tekstberichten. Geen message requests, broadcasts, gesynchroniseerde telefooncontacten of media.
+- **Mogelijke koppelingen:** een apart tabblad naast Netwerkactiviteit doorzoekt alle LinkedIn- en Instagram-accounts op exacte naam/gebruikersnaam-overeenkomsten. Bekijk beide profielen, bevestig een koppeling en de bevestigde combinatie verdwijnt uit de suggesties. Geen automatische samenvoeging; lijst is gepagineerd.
 - **Profielen handmatig koppelen:** een zoekopdracht zoals `Ilse Wintermans` kan ook `@ilsewintermans` vinden. Bij exacte overeenkomst van naam en gebruikersnaam verschijnt een voorstel *Mogelijk dezelfde persoon*. Koppelen vereist een expliciete bevestiging en kan vanaf de contactpagina worden teruggedraaid. Geen automatische samenvoeging van personen.
 - **Instagram doorzoeken:** accounts en inbox-tekstberichten verschijnen afzonderlijk bij zoekresultaten. Instagram-accounts worden niet automatisch aan LinkedIn-personen gekoppeld.
 
