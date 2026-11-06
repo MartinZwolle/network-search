@@ -5,7 +5,7 @@ from app.context import migrate as context_migrate, save as save_context, get as
 from app.employment import migrate as employment_migrate, observe
 from app.identities import migrate as identity_migrate
 from app.manual import (migrate as manual_migrate, create_person, rename_person,
-                        display_name, search_manual, save_job, employment, delete_manual_job)
+                        display_name, search_manual, save_job, employment, delete_manual_job, possible_duplicates, delete_person)
 from app.person_ids import (migrate as people_migrate, sync as sync_people,
                             account_person, merge_people)
 
@@ -79,6 +79,43 @@ class ManualPeopleTests(unittest.TestCase):
         self.assertEqual(raw["company"], "Wehkamp")
         sync_people(self.db)
         self.assertEqual(get_context(self.db,pid)["how_known"], "Wehkamp")
+
+    def test_duplicates_warn_without_auto_merging(self):
+        matches = possible_duplicates(self.db, "  alex   TEST ")
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["platforms"], "linkedin")
+        pid = create_person(self.db, "Alex Test")
+        self.assertEqual(len(possible_duplicates(self.db, "Alex Test", exclude_id=pid)), 1)
+        self.assertNotEqual(pid, matches[0]["id"])
+
+    def test_delete_standalone_manual_person_only(self):
+        pid = create_person(self.db, "Alex Test")
+        save_context(self.db, pid, how_known="Vereniging", network_tags="#vereniging")
+        save_job(self.db, pid, "Vrijwilligerswerk", "Penningmeester")
+        delete_person(self.db, pid)
+        self.assertIsNone(self.db.execute(
+            "SELECT id FROM farley_people WHERE id=?", (pid,)
+        ).fetchone())
+        self.assertEqual(self.db.execute(
+            "SELECT count(*) FROM farley_manual_jobs WHERE person_id=?", (pid,)
+        ).fetchone()[0], 0)
+        imported = account_person(self.db, "linkedin", "https://linkedin.com/in/alex")
+        with self.assertRaises(ValueError):
+            delete_person(self.db, imported)
+
+    def test_merge_manual_duplicate_into_linkedin_preserves_edits_and_alias(self):
+        pid = create_person(self.db, "Alex Test")
+        save_context(self.db, pid, how_known="Oud-collega", network_tags="#wehkamp")
+        save_job(self.db, pid, "Wehkamp", "Teamlead")
+        imported = account_person(self.db, "linkedin", "https://linkedin.com/in/alex")
+        merge_people(self.db, imported, pid)
+        self.assertEqual(account_person(self.db, "linkedin", "https://linkedin.com/in/alex"), imported)
+        from app.person_ids import details
+        self.assertEqual(details(self.db, pid)[0], imported)
+        self.assertEqual(get_context(self.db, imported)["how_known"], "Oud-collega")
+        self.assertEqual(len(employment(self.db, imported)), 2)
+        with self.assertRaises(ValueError):
+            delete_person(self.db, pid)
 
     def test_attach_to_person_preserves_manual_notes_and_id(self):
         pid = create_person(self.db, "Alex Test")
