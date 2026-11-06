@@ -167,6 +167,48 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  'border:1px solid #bdcbcb;border-radius:4px"><br>'
                  '<button type="submit" style="margin-top:16px">Opslaan</button>'
                  '</form></details></section>')
+    if person_id is not None:
+        html += '<section><h2>Functies en werkhistorie</h2>'
+        html += ('<p class="muted">Geïmporteerde LinkedIn-functies blijven als bron bewaard. '
+                 'Handmatige correcties en aanvullende functies worden nooit overschreven '
+                 'door een nieuwe export.</p>')
+        jobs = farley_employment(db, person_id)
+        for job in jobs:
+            source = "LinkedIn-observatie" if job["kind"] == "import" else "Handmatig toegevoegd"
+            label = escape(job["title"] or "Functie onbekend")
+            company = escape(job["company"] or "Werkgever onbekend")
+            html += (f'<article><strong>{label}</strong> · {company}<br>'
+                     f'<small>{source}'
+                     f'{" · voor het eerst gezien op " + escape(job["first_seen"][:10]) if job["first_seen"] else ""}'
+                     f'{" · vanaf " + escape(job["started"]) if job["started"] else ""}'
+                     f'{" t/m " + escape(job["ended"]) if job["ended"] else ""}</small>')
+            if job["note"]:
+                html += f'<p>{escape(job["note"])}</p>'
+            html += (f'<details><summary style="cursor:pointer;color:#087f80">✎ Functie bewerken</summary>'
+                     f'<form method="post" action="/person/{person_id}/job">'
+                     f'<input type="hidden" name="kind" value="{job["kind"]}">'
+                     f'<input type="hidden" name="job_id" value="{job["id"]}">'
+                     f'<label>Functie<br><input type="text" name="title" maxlength="200" value="{escape(job["title"],quote=True)}"></label><br>'
+                     f'<label>Werkgever<br><input type="text" name="company" maxlength="200" value="{escape(job["company"],quote=True)}"></label><br>'
+                     f'<label>Startdatum<br><input type="date" name="started" value="{escape(job["started"],quote=True)}"></label><br>'
+                     f'<label>Einddatum<br><input type="date" name="ended" value="{escape(job["ended"],quote=True)}"></label><br>'
+                     f'<label>Toelichting<br><textarea name="note" maxlength="2000">{escape(job["note"])}</textarea></label><br>'
+                     '<button type="submit">Wijzigingen opslaan</button></form></details>')
+            if job["kind"] == "manual":
+                html += (f'<form method="post" action="/person/{person_id}/job/delete">'
+                         f'<input type="hidden" name="job_id" value="{job["id"]}">'
+                         '<button type="submit" style="background:#69767a">Functie verwijderen</button></form>')
+            html += '</article>'
+        html += (f'<details style="margin-top:12px"><summary style="cursor:pointer;color:#087f80;font-weight:700">'
+                 '+ Functie toevoegen</summary>'
+                 f'<form method="post" action="/person/{person_id}/job">'
+                 '<input type="hidden" name="kind" value="new">'
+                 '<label>Functie<br><input name="title" type="text" maxlength="200"></label><br>'
+                 '<label>Werkgever<br><input name="company" type="text" maxlength="200"></label><br>'
+                 '<label>Startdatum<br><input name="started" type="date"></label><br>'
+                 '<label>Einddatum<br><input name="ended" type="date"></label><br>'
+                 '<label>Toelichting<br><textarea name="note" maxlength="2000"></textarea></label><br>'
+                 '<button type="submit">Functie toevoegen</button></form></details></section>')
     html += '<section><h2>Sociale accounts</h2>'
     if contact is not None:
         html += (f'<article><strong>LinkedIn</strong> · '
