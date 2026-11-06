@@ -429,7 +429,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                 display_name = person["display_name"]
                 person_link = "/person/" + str(person["person_id"])
                 social_labels = "Persoonlijk toegevoegd"
-                note = "Geen gekoppelde sociale accounts" if not db else ""
+                note = "Persoonlijk dossier"
                 count = ""
             elif source == "linkedin":
                 display_name = " ".join(filter(None, [person["first_name"], person["last_name"]]))
