@@ -117,6 +117,13 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
             f'<h1>{escape(name)}</h1><nav>{nav}</nav>'
             '<p class="muted">Eén persoon, meerdere sociale accounts.</p></header>')
     if person_id is not None:
+        html += (f'<details style="margin:8px 0 20px"><summary style="cursor:pointer;color:#087f80">'
+                 '✎ Weergavenaam aanpassen</summary>'
+                 f'<form method="post" action="/person/{person_id}/name">'
+                 f'<input type="text" name="name" value="{escape(name,quote=True)}" '
+                 'maxlength="160" required style="padding:10px;width:min(100%,480px)"> '
+                 '<button type="submit">Naam opslaan</button></form></details>')
+    if person_id is not None:
         context = get_context(db, person_id)
         net_tags = person_tags(db, person_id)
         html += '<section><h2>Farley File · persoonlijk</h2>'
