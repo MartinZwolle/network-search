@@ -380,7 +380,7 @@ header{{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:
 section{{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}}
 input[type=text]{{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}}
 button{{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}}
-button:hover{{filter:brightness(.9)}}article{{padding:16px 0;border-top:1px solid var(--edge)}}
+button:hover{{filter:brightness(.9)}}.add-person{{margin:16px 0 22px;background:#fff;padding:13px 20px;border:1px solid var(--edge);border-radius:5px}}.add-person summary{{cursor:pointer;color:var(--accent);font-weight:700;list-style:none}}.add-person summary::-webkit-details-marker{{display:none}}.plus-icon{{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#e4f3f0;font-size:1.35rem;margin-right:7px}}.add-person[open] .plus-icon{{transform:rotate(45deg)}}article{{padding:16px 0;border-top:1px solid var(--edge)}}
 article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
@@ -389,11 +389,11 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
-    <section><h2>Persoon handmatig toevoegen</h2>
+    <details class="add-person"><summary><span class="plus-icon" aria-hidden="true">+</span> Persoon toevoegen</summary>
     <p class="muted">Ook zonder LinkedIn, Instagram of Facebook. Later kun je accounts toevoegen.</p>
     <form method="post" action="/person/new">
     <input type="text" name="name" required maxlength="160" placeholder="Voor- en achternaam">
-    <button type="submit">Persoon toevoegen</button></form></section>
+    <button type="submit">Toevoegen</button></form></details>
     <section><h2>Zoeken</h2><form method="get">
     <input name="q" type="text" value="{escape(q, quote=True)}"
            placeholder="Naam, werkgever, functie of gesprek">
