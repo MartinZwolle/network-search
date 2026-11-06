@@ -1,0 +1,7 @@
+data/
+.env
+*.db
+*.sqlite*
+*.csv
+__pycache__/
+.pytest_cache/
