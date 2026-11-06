@@ -2,9 +2,13 @@
 
 Een lichte, zelfgehoste zoekmachine voor je LinkedIn-netwerk. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.4.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.5.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
 ## Mogelijkheden
+
+- **Instagram ZIP-import:** officiële JSON-export in één keer uploaden. Alleen volgers, gevolgde accounts en normale inbox-tekstberichten. Geen message requests, broadcasts, gesynchroniseerde telefooncontacten of media.
+- **Instagram doorzoeken:** accounts en inbox-tekstberichten verschijnen afzonderlijk bij zoekresultaten. Instagram-accounts worden niet automatisch aan LinkedIn-personen gekoppeld.
+
 
 - **LinkedIn-connecties importeren** uit `Connections.csv` (naam, functie, werkgever, profiel-URL).
 - **Berichten importeren** uit `messages.csv`, inclusief doorzoekbare inhoud.
@@ -43,6 +47,8 @@ Open de app en klap onder de zoekresultaten **CSV importeren** uit. Upload de be
 1. `Connections.csv`
 2. `messages.csv`
 
+Voor Instagram kun je de oorspronkelijke Meta ZIP (JSON-formaat) in hetzelfde importblok uploaden (max. 80 MB). Een nieuwe Instagram-import dedupliceert berichten en werkt volgstatussen bij. Alleen tekstberichten worden opgenomen. De ZIP wordt niet als bestand opgeslagen; de inhoud wordt verwerkt in SQLite. De import negeert bewust berichtverzoeken en gesynchroniseerde contacten.
+
 De importer ondersteunt gebruikelijke LinkedIn-CSV-encodings; bestanden mogen maximaal **25 MB per upload** zijn. De ruwe uploadbestanden worden niet als losse bestanden opgeslagen. Geïmporteerde persoonsgegevens en berichtinhoud staan in `data/network.db` op de Docker-host.
 
 Bij een upgrade vanaf v0.3.1 naar v0.3.2 worden reeds geïmporteerde werkgevers en functies als eerste bekende observatie geregistreerd. Maak vóór een update of nieuwe import een back-up van `data/network.db`. Opnieuw uploaden van dezelfde export maakt geen extra werkhistorie-items aan.
@@ -64,7 +70,8 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [x] Werkgever- en functiehistorie vastleggen bij nieuwe LinkedIn-exports
 - [x] Basis-relatieanalyse: frequentie per jaar en laatste herkende LinkedIn-bericht
 - [ ] Uitgebreide relatieanalyse: wederkerigheid, filters en selectie voor Monica
-- [ ] Facebook- en Instagram-export ondersteunen
+- [x] Instagram: volgers, gevolgde accounts en inbox-tekst importeren
+- [ ] Facebook-export ondersteunen
 - [ ] Accounts van dezelfde persoon veilig koppelen (met handmatige bevestiging)
 - [ ] Monica-integratie voor notities, contactmomenten en herinneringen
 - [ ] Verdere zoekverbeteringen, eventueel optionele lokale semantische zoekfunctie
