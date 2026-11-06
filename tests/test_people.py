@@ -3,6 +3,7 @@ import unittest
 
 from app.identities import migrate as migrate_identities, link
 from app.people import merged_contacts, profile, profile_url
+from app.person_ids import migrate as migrate_people, sync as sync_people, details as person_details, account_person, add_note
 
 
 class PeopleTests(unittest.TestCase):
@@ -32,6 +33,8 @@ class PeopleTests(unittest.TestCase):
             INSERT INTO instagram_accounts VALUES('ilsewintermans', 1, 1);
         """)
         migrate_identities(self.db)
+        migrate_people(self.db)
+        sync_people(self.db)
 
     def linkedin_search_rows(self):
         return self.db.execute(
@@ -48,6 +51,15 @@ class PeopleTests(unittest.TestCase):
         self.assertEqual(len(results), 2)
         self.assertIn("linkedin_url=", profile_url(linkedin_url="https://linkedin.com/in/ilse"))
         self.assertIn("instagram_username=", profile_url(instagram_username="ilsewintermans"))
+
+    def test_persistent_id_and_obsidian_notes(self):
+        pid = account_person(self.db, "instagram", "ilsewintermans")
+        add_note(self.db, pid, "Gesprek", "obsidian://open?vault=Notes&file=Ilse")
+        link(self.db, "https://linkedin.com/in/ilse", "ilsewintermans")
+        linked_pid = account_person(self.db, "linkedin", "https://linkedin.com/in/ilse")
+        self.assertEqual(person_details(self.db, pid)[0], linked_pid)
+        note = self.db.execute("SELECT person_id FROM farley_notes").fetchone()
+        self.assertEqual(note["person_id"], linked_pid)
 
     def test_linked_profiles_are_single_person(self):
         link(self.db, "https://linkedin.com/in/ilse", "ilsewintermans")
