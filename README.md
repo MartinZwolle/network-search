@@ -4,7 +4,16 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.8.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.9.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Handmatige personen en werkhistorie (v0.9.0)
+
+- **Personen zonder socials:** maak op de startpagina een nieuw profiel met alleen een naam. Het krijgt meteen een permanent `/person/<id>`-adres. Het profiel is op naam te vinden; later kun je via de profielpagina een bestaand, al geïmporteerd LinkedIn- of Instagram-account expliciet aan dezelfde persoon koppelen.
+- **Weergavenaam:** pas de naam van een persoon onafhankelijk van de LinkedIn- of Instagram-export aan; ook deze handmatig ingevoerde naam blijft behouden.
+- **Functies en banen:** voeg zelfstandig banen toe (uit het verleden of de toekomst), met functietitel, werkgever en optionele echte begin- en einddatum. Je kunt zelf toegevoegde banen ook wijzigen of verwijderen.
+- **Geïmporteerde LinkedIn-functies corrigeren:** bewerken schrijft een afzonderlijke correctie in `farley_job_overrides`. De oorspronkelijke waarneming in `employment_history` blijft onaangetast. Een latere export kan nieuwe waarnemingen toevoegen, maar wist of overschrijft jouw correcties niet. Een eerste waarnemingsdatum is geen bekende startdatum.
+- **Strikte scheiding bronnen:** persoonlijke notities, netwerktags, Obsidian-links, handmatig aangemaakte personen, eigen functieregels en geïmporteerde-correcties staan in aparte tabellen en worden niet door LinkedIn/Instagram-imports geüpdatet. Bij expliciete samenvoegingen worden bestaande handmatige velden meegenomen.
+- **Voor upgrade:** maak een consistente SQLite-back-up van `data/network.db`. Alle nieuwe tabellen worden toegevoegd bij het starten; de app is nog in de 0.x-fase en nieuwe workflows moeten eerst met een testprofiel worden nagelopen.
 
 ## Logo
 
@@ -110,6 +119,8 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [x] Eerste handmatige koppeling LinkedIn ↔ Instagram, met suggesties en ontkoppelen
 - [ ] Uitbreiding naar een universeel personenmodel (ook voor Facebook)
 - [x] Farley File-naam, permanente personenlinks en Obsidian-notitiekoppeling
+- [x] Handmatig personen toevoegen (zonder sociaal account)
+- [x] Werkhistorie handmatig aanvullen, corrigeren en dateren zonder exports te overschrijven
 - [x] Bewerkbaar persoonsdossier: hoe ken ik iemand, achtergrond, interesses en geheugensteuntjes
 - [x] Overlappende netwerktags met overzichtspagina's
 - [ ] Eventueel een Monica-integratie als daar later behoefte aan is
