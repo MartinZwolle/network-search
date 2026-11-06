@@ -305,23 +305,23 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     if q.strip() and expanded_query(q):
         page += '<p class="muted">Zoektermen uitgebreid met verwante functietitels en vaktermen (NL/EN). Dit is trefwoordzoeken, geen AI.</p>'
     if suggestions:
-        page += '<section><h2>Mogelijk dezelfde persoon</h2><p class="muted">Alleen suggesties op basis van namen. Controleer de profielen vóór je bevestigt.</p>'
+        page += '<section><h2>Mogelijk dezelfde persoon</h2><p class="muted">Controleer de profielen voordat je koppelt.</p>'
         for contact, account in suggestions:
             name = escape((contact["first_name"] or "") + " " + (contact["last_name"] or ""))
             handle = escape(account["username"])
             page += (f'<article><strong>{name}</strong> (LinkedIn) ↔ '
-                     f'<a href="https://www.instagram.com/{quote(account["username"], safe="")}/" target="_blank" rel="noopener noreferrer">@{handle}</a>'
+                     f'<a href="https://www.instagram.com/{quote(account["username"], safe="")}/" '
+                     f'target="_blank" rel="noopener noreferrer">@{handle}</a>'
                      f'<form method="post" action="/profile-link">'
                      f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
                      f'<input type="hidden" name="instagram_username" value="{escape(account["username"], quote=True)}">'
                      f'<button type="submit">Zelfde persoon — koppelen</button></form>'
-                 f'<form action="/profile-link" method="post">'
-                 f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
-                 f'<input type="hidden" name="instagram_username" value="{escape(username, quote=True)}">'
-                 f'<input type="hidden" name="source" value="matches">'
-                 f'<input type="hidden" name="action" value="reject">'
-                 f'<button type="submit" style="background:#69767a">Geen koppeling</button>'
-                 f'</form></article>')
+                     f'<form method="post" action="/profile-link">'
+                     f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
+                     f'<input type="hidden" name="instagram_username" value="{escape(account["username"], quote=True)}">'
+                     f'<input type="hidden" name="action" value="reject">'
+                     f'<button type="submit" style="background:#69767a">Geen koppeling</button>'
+                     f'</form></article>')
         page += '</section>'
     if q.strip():
         page += f'<section><h2>Personen ({len(people_results)} getoond)</h2>'
