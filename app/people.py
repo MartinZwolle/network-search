@@ -108,7 +108,7 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
            ' · <a href="/matches">Mogelijke koppelingen</a>')
     html = ('<!doctype html><html lang="nl"><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<title>Persoon · Network Search</title><style>' + CSS + '</style>'
+            '<title>Persoon · Farley File</title><style>' + CSS + '</style>'
             '<header><span class="brand">Elegant Chaos / Labs</span>'
             f'<h1>{escape(name)}</h1><nav>{nav}</nav>'
             '<p class="muted">Eén persoon, meerdere sociale accounts.</p></header>')
