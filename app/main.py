@@ -12,14 +12,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
-from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates
+from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.5.2"
+APP_VERSION = "0.5.3"
 
 
 def footer():
@@ -194,7 +194,11 @@ def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(.
                  action: str = Form("link"), source: str = Form("contact")):
     with connect() as db:
         try:
-            if action == "unlink":
+            if action == "reject":
+                reject_match(db, linkedin_url, instagram_username)
+            elif action == "restore":
+                restore_match(db, linkedin_url, instagram_username)
+            elif action == "unlink":
                 unlink_profiles(db, linkedin_url, instagram_username)
             elif action == "link":
                 link_profiles(db, linkedin_url, instagram_username)
@@ -204,6 +208,17 @@ def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(.
             raise HTTPException(400, str(exc)) from exc
     destination = "/matches" if source == "matches" else "/contact?url=" + quote(linkedin_url, safe="")
     return RedirectResponse(destination, status_code=303)
+
+
+@app.post("/manual-link")
+def manual_link(linkedin_contact: str = Form(...), instagram_username: str = Form(...)):
+    with connect() as db:
+        try:
+            url = resolve_contact(db, linkedin_contact)
+            link_profiles(db, url, instagram_username.strip().lstrip("@").casefold())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/matches?linked=1", status_code=303)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -295,7 +310,14 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'<form method="post" action="/profile-link">'
                      f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
                      f'<input type="hidden" name="instagram_username" value="{escape(account["username"], quote=True)}">'
-                     f'<button type="submit">Zelfde persoon — koppelen</button></form></article>')
+                     f'<button type="submit">Zelfde persoon — koppelen</button></form>'
+                 f'<form action="/profile-link" method="post">'
+                 f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
+                 f'<input type="hidden" name="instagram_username" value="{escape(username, quote=True)}">'
+                 f'<input type="hidden" name="source" value="matches">'
+                 f'<input type="hidden" name="action" value="reject">'
+                 f'<button type="submit" style="background:#69767a">Geen koppeling</button>'
+                 f'</form></article>')
         page += '</section>'
     if q.strip():
         page += f"<section><h2>Contacten ({len(contacts)} getoond)</h2>"
@@ -451,10 +473,15 @@ def activity_page():
 
 
 @app.get("/matches", response_class=HTMLResponse)
-def possible_matches(page: int = 1):
+def possible_matches(page: int = 1, linked: int = 0):
     with connect() as db:
         suggestions = all_candidates(db)
         linked_count = db.execute("SELECT COUNT(*) FROM profile_links").fetchone()[0]
+        rejected_rows = db.execute("""SELECT r.linkedin_url, r.instagram_username,
+            c.first_name, c.last_name FROM profile_rejections r
+            JOIN contacts c ON c.url=r.linkedin_url
+            ORDER BY r.rejected_at DESC LIMIT 30""").fetchall()
+        rejection_count = db.execute("SELECT COUNT(*) FROM profile_rejections").fetchone()[0]
     page_size = 30
     total = len(suggestions)
     max_page = max(1, (total + page_size - 1) // page_size)
@@ -484,6 +511,22 @@ def possible_matches(page: int = 1):
     <a href="/activity">Netwerkactiviteit</a> ·
     <a href="/matches" aria-current="page">Mogelijke koppelingen</a></nav>
     </header>"""
+    html += """<section><h2>Handmatig koppelen</h2>
+    <p class="muted">Ook voor accounts waarvan de namen niet overeenkomen.
+    Vul de volledige LinkedIn-naam (of profiel-URL) en de exacte Instagram-gebruikersnaam in.
+    Bij dubbele LinkedIn-namen gebruik je de profiel-URL.</p>
+    <form action="/manual-link" method="post">
+    <label for="linkedin_contact">LinkedIn-naam of profiel-URL</label><br>
+    <input id="linkedin_contact" name="linkedin_contact" type="text"
+           placeholder="Bijvoorbeeld Ilse Wintermans" required
+           style="width:100%;max-width:540px;padding:10px;margin-bottom:10px"><br>
+    <label for="instagram_username">Instagram-gebruikersnaam</label><br>
+    <input id="instagram_username" name="instagram_username" type="text"
+           placeholder="@gebruikersnaam" required
+           style="width:100%;max-width:540px;padding:10px;margin-bottom:10px"><br>
+    <button type="submit">Accounts koppelen</button></form></section>"""
+    if linked:
+        html += '<p style="color:#087f80"><strong>Accounts gekoppeld!</strong></p>'
     html += (f'<section><h2>{total} mogelijke koppelingen</h2>'
              f'<p>{linked_count} profielen al handmatig gekoppeld.</p>'
              '<p class="muted">Alleen exacte overeenkomsten tussen een volledige '
@@ -513,4 +556,18 @@ def possible_matches(page: int = 1):
     if page < max_page:
         html += f' · <a href="/matches?page={page+1}">Volgende →</a>'
     html += '</p>'
+    html += (f'<details style="margin-top:24px"><summary style="cursor:pointer">'
+             f'Afgewezen voorstellen ({rejection_count}) — herstellen</summary>'
+             '<section><h2>Afgewezen voorstellen</h2>'
+             '<p class="muted">De laatste 30 afwijzingen. Herstellen maakt de suggestie weer zichtbaar.</p>')
+    for row in rejected_rows:
+        display_name = escape(" ".join(filter(None, [row["first_name"], row["last_name"]])))
+        html += (f'<article>{display_name} ↔ @{escape(row["instagram_username"])}'
+                 f'<form method="post" action="/profile-link">'
+                 f'<input type="hidden" name="linkedin_url" value="{escape(row["linkedin_url"], quote=True)}">'
+                 f'<input type="hidden" name="instagram_username" value="{escape(row["instagram_username"], quote=True)}">'
+                 f'<input type="hidden" name="action" value="restore">'
+                 f'<input type="hidden" name="source" value="matches">'
+                 f'<button type="submit">Afwijzing ongedaan maken</button></form></article>')
+    html += '</section></details>'
     return html + footer() + '</html>'
