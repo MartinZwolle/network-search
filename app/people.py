@@ -15,7 +15,7 @@ CSS = """
 *{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}
 h1,h2{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}
 a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
-header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}
+header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}\n.profile-brand{display:flex;align-items:center;gap:14px}.profile-brand img{width:56px;height:56px;border-radius:12px}
 .brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}
 section{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);box-shadow:0 8px 28px #192f2d08}
 article{padding:14px 0;border-top:1px solid var(--edge)}
@@ -109,8 +109,8 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
            ' · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a>')
     html = ('<!doctype html><html lang="nl"><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<title>Persoon · Farley File</title><style>' + CSS + '</style>'
-            '<header><span class="brand">Elegant Chaos / Labs</span>'
+            '<title>Persoon · Farley File</title><link rel="icon" type="image/svg+xml" href="/static/farley-logo.svg"><style>' + CSS + '</style>'
+            '<header><div class="profile-brand"><a href="/"><img src="/static/farley-logo.svg" alt="Farley File home" width="56" height="56"></a><span class="brand">Elegant Chaos / Labs</span></div>'
             f'<h1>{escape(name)}</h1><nav>{nav}</nav>'
             '<p class="muted">Eén persoon, meerdere sociale accounts.</p></header>')
     if person_id is not None:
