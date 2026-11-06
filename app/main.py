@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
+from app.people import profile as render_profile, profile_url, merged_contacts
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
@@ -19,7 +20,7 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.5.3"
+APP_VERSION = "0.6.0"
 
 
 def footer():
@@ -206,7 +207,9 @@ def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(.
                 raise HTTPException(400, "Onbekende actie")
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-    destination = "/matches" if source == "matches" else "/contact?url=" + quote(linkedin_url, safe="")
+    destination = ("/matches" if source == "matches" else
+                   profile_url(linkedin_url=linkedin_url) if source == "person" else
+                   "/contact?url=" + quote(linkedin_url, safe=""))
     return RedirectResponse(destination, status_code=303)
 
 
@@ -270,6 +273,7 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
                     if len(contacts) >= 100:
                         break
         suggestions = identity_candidates(db, contacts, ig_results) if q.strip() else []
+        people_results = merged_contacts(db, contacts, ig_results) if q.strip() else []
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Network Search</title><style>
@@ -320,33 +324,39 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                  f'</form></article>')
         page += '</section>'
     if q.strip():
-        page += f"<section><h2>Contacten ({len(contacts)} getoond)</h2>"
-        for contact in contacts:
-            url = escape(contact["url"], quote=True)
-            page += (f'<article><strong>{escape(contact["first_name"] or "")} '
-                     f'{escape(contact["last_name"] or "")}</strong><br>'
-                     f'{escape(contact["position"] or "")} · '
-                     f'{escape(contact["company"] or "")}<br>'
-                     f'<a href="/contact?url={quote(contact["url"], safe="")}">Gesprekken bekijken ({contact["message_count"]})</a> · ' 
-                     f'<a href="{url}" target="_blank" rel="noopener noreferrer">'
-                     'LinkedIn-profiel</a></article>')
-        page += f"</section><section><h2>Berichten ({len(messages)} getoond)</h2>"
+        page += f'<section><h2>Personen ({len(people_results)} getoond)</h2>'
+        for source, person in people_results:
+            if source == "linkedin":
+                display_name = " ".join(filter(None, [person["first_name"], person["last_name"]]))
+                person_link = profile_url(linkedin_url=person["url"])
+                with connect() as links_db:
+                    linked_handles = [r["instagram_username"] for r in links_db.execute(
+                        "SELECT instagram_username FROM profile_links WHERE linkedin_url=? ORDER BY instagram_username",
+                        (person["url"],)
+                    )]
+                social_labels = "LinkedIn" + (" · Instagram " + ", ".join("@" + h for h in linked_handles) if linked_handles else "")
+                note = f'{person["position"] or ""} · {person["company"] or ""}'
+                count = f'{person["message_count"]} LinkedIn-berichten'
+            else:
+                display_name = "@" + person["username"]
+                person_link = profile_url(instagram_username=person["username"])
+                social_labels = "Instagram"
+                note = "Instagram-account"
+                count = ""
+            page += (f'<article><strong><a href="{escape(person_link, quote=True)}">{escape(display_name)}</a></strong><br>'
+                     f'<small>{escape(social_labels)}</small><br>'
+                     f'{escape(note)}<br>'
+                     f'<a href="{escape(person_link, quote=True)}">Profiel bekijken</a>'
+                     f'{" · " + escape(count) if count else ""}</article>')
+        page += '</section>'
+        page += f"<section><h2>Berichten ({len(messages)} getoond)</h2>"
         for message in messages:
             page += (f'<article><strong>{escape(message["subject"] or "(geen onderwerp)")}'
                      f'</strong><br><small>{escape(message["date"] or "")} · '
                      f'{escape(message["sender"] or "")}</small>'
                      f'<pre>{escape((message["content"] or "")[:700])}</pre></article>')
         page += "</section>"
-        page += f'<section><h2>Instagram-accounts ({len(ig_results)} getoond)</h2>'
-        for account in ig_results:
-            username = escape(account["username"])
-            page += (f'<article><strong>@{username}</strong><br>'
-                     f'<small>{"Jij volgt dit account" if account["follows"] else ""}'
-                     f'{" · " if account["follows"] and account["follower"] else ""}'
-                     f'{"Volgt jou" if account["follower"] else ""}</small><br>'
-                     f'<a href="https://www.instagram.com/{quote(account["username"], safe="")}/" '
-                     f'target="_blank" rel="noopener noreferrer">Instagram-profiel</a></article>')
-        page += f'</section><section><h2>Instagram-berichten ({len(ig_message_results)} getoond)</h2>'
+        page += f'<section><h2>Instagram-berichten ({len(ig_message_results)} getoond)</h2>'
         for msg in ig_message_results:
             page += (f'<article><strong>{escape(msg["sender"])}</strong> '
                      f'<small>{escape(msg["date"][:10])}</small>'
@@ -370,78 +380,20 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     return page + footer() + "</html>"
 
 
-@app.get("/contact", response_class=HTMLResponse)
+@app.get("/contact")
 def contact_detail(url: str):
+    """Keep bookmarked historical contact URLs working."""
+    return RedirectResponse(profile_url(linkedin_url=url), status_code=303)
+
+
+@app.get("/person", response_class=HTMLResponse)
+def person_detail(linkedin_url: str = "", instagram_username: str = "", find: str = ""):
     with connect() as db:
-        contact = db.execute("SELECT * FROM contacts WHERE url=?", (url,)).fetchone()
-        if contact is None:
-            raise HTTPException(404, "Contact niet gevonden")
-        linked_instagram = db.execute("""
-            SELECT instagram_username FROM profile_links
-            WHERE linkedin_url=? ORDER BY instagram_username
-        """, (url,)).fetchall()
-        employment = db.execute("""
-            SELECT company, position, first_seen_at, superseded_at
-            FROM employment_history WHERE contact_url=? ORDER BY id DESC
-        """, (url,)).fetchall()
-        history = db.execute("""
-            SELECT m.* FROM contact_messages cm
-            JOIN messages m ON m.message_key=cm.message_key
-            WHERE cm.contact_url=?
-            ORDER BY m.date DESC
-        """, (url,)).fetchall()
-    name = " ".join(filter(None, (contact["first_name"], contact["last_name"])))
-    received = sum(profile_key(m["sender_url"]) == profile_key(url) for m in history)
-    sent = len(history) - received
-    conversations = len({m["conversation_id"] for m in history if m["conversation_id"]})
-    last = history[0]["date"] if history else "Geen berichten gevonden"
-    page = """<!doctype html><html lang="nl"><meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Contact · Network Search</title>""" + "<style>\n:root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}\n*{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}\nh1,h2,h3{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}h2{font-size:1.45rem}\na{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}\nheader{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}\n.brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}\nsection{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}\ninput[type=text]{padding:13px 15px;width:min(78%,650px);border:1px solid #bdcbcb;border-radius:4px;font:inherit}\nbutton{background:var(--accent);color:white;border:0;padding:14px 20px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}\nbutton:hover{filter:brightness(.9)}article{padding:16px 0;border-top:1px solid var(--edge)}\narticle strong{font-size:1.08rem}small,.muted{color:var(--muted)}\npre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}\n.badge{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}\n@media(max-width:550px){input[type=text]{width:100%;margin-bottom:10px}button{width:100%}}\n</style>" + f"""
-    <p><a href="/">← Terug naar zoeken</a></p>
-    <header><span class="brand">Elegant Chaos / Labs</span>
-    <h1>{escape(name)}</h1><nav style="margin:12px 0"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a></nav><p>{escape(contact["position"] or "")} ·
-    {escape(contact["company"] or "")}</p>
-    <a href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
-    LinkedIn-profiel ↗</a></header>
-    <section><h2>Contactgeschiedenis</h2>
-    <p><span class="badge">{len(history)} berichten</span> ·
-    {conversations} gesprekken · {received} ontvangen · {sent} overige</p>
-    <p>Laatste LinkedIn-bericht: {escape(last)}</p></section>
-    """
-    if linked_instagram:
-        page += '<section><h2>Gekoppelde accounts</h2>'
-        for account in linked_instagram:
-            handle = escape(account["instagram_username"])
-            page += (f'<article><a href="https://www.instagram.com/{quote(account["instagram_username"], safe="")}/" '
-                     f'target="_blank" rel="noopener noreferrer">Instagram: @{handle}</a>'
-                     f'<form method="post" action="/profile-link">'
-                     f'<input type="hidden" name="linkedin_url" value="{escape(url, quote=True)}">'
-                     f'<input type="hidden" name="instagram_username" value="{escape(account["instagram_username"], quote=True)}">'
-                     f'<input type="hidden" name="action" value="unlink">'
-                     f'<button type="submit">Koppeling verwijderen</button></form></article>')
-        page += '</section>'
-    page += contact_timeline(history, employment)
-    page += """<section><h2>Werkhistorie (waargenomen)</h2>
-    <p class="muted">Datums geven aan wanneer Network Search een functie
-    voor het eerst in een LinkedIn-export zag, niet de echte startdatum.</p>"""
-    if employment:
-        for index, job in enumerate(employment):
-            label = "Huidige vermelding" if index == 0 else "Eerdere vermelding"
-            page += (f"<article><strong>{escape(job['position'] or 'Functie onbekend')}</strong>"
-                     f" · {escape(job['company'] or 'Werkgever onbekend')}<br>"
-                     f"<small>{label} · gezien vanaf "
-                     f"{escape(job['first_seen_at'][:10])}</small></article>")
-    else:
-        page += "<p>Er zijn nog geen functies geregistreerd.</p>"
-    page += "</section><section><h2>Berichten</h2>"
-    for msg in history:
-        direction = "Ontvangen" if profile_key(msg["sender_url"]) == profile_key(url) else "Verzonden / groepsbericht"
-        page += (f"<article><small>{escape(msg['date'] or '')} · {direction} · "
-                 f"{escape(msg['sender'] or '')}</small>"
-                 f"<h3>{escape(msg['subject'] or '(geen onderwerp)')}</h3>"
-                 f"<pre>{escape(msg['content'] or '')}</pre></article>")
-    return page + "</section>" + footer() + "</html>"
+        return render_profile(db, linkedin_url=linkedin_url,
+                              instagram_username=instagram_username,
+                              find=find, footer=footer,
+                              contact_timeline=contact_timeline,
+                              profile_key=profile_key)
 
 
 @app.get("/activity", response_class=HTMLResponse)
