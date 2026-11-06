@@ -14,6 +14,15 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
+APP_VERSION = "0.2.1"
+
+
+def footer():
+    return (f'<footer style="margin-top:36px;padding:18px 0;border-top:1px solid #dde6e5;'
+            f'color:#647078;font-size:.85rem;text-align:center">'
+            f'Network Search · v{APP_VERSION} · '
+            f'<a href="https://github.com/MartinZwolle/network-search" '
+            f'target="_blank" rel="noopener noreferrer">GitHub</a></footer>')
 
 
 def connect():
@@ -222,7 +231,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'{escape(message["sender"] or "")}</small>'
                      f'<pre>{escape((message["content"] or "")[:700])}</pre></article>')
         page += "</section>"
-    return page + "</html>"
+    return page + footer() + "</html>"
 
 
 @app.get("/contact", response_class=HTMLResponse)
@@ -262,4 +271,4 @@ def contact_detail(url: str):
                  f"{escape(msg['sender'] or '')}</small>"
                  f"<h3>{escape(msg['subject'] or '(geen onderwerp)')}</h3>"
                  f"<pre>{escape(msg['content'] or '')}</pre></article>")
-    return page + "</section></html>"
+    return page + "</section>" + footer() + "</html>"
