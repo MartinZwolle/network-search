@@ -52,6 +52,11 @@ def candidates(db, linkedin_rows, instagram_rows):
                 (contact["url"], handle),
             ).fetchone()
             if linked is None and rejected is None:
+                from app.person_ids import account_person
+                li_person = account_person(db, "linkedin", contact["url"])
+                ig_person = account_person(db, "instagram", handle)
+                if li_person is not None and li_person == ig_person:
+                    continue
                 result.append((contact, account))
     return result[:15]
 
@@ -125,6 +130,11 @@ def all_candidates(db):
             continue
         for handle in accounts.get(key, []):
             if handle not in linked and (contact["url"], handle) not in rejected:
+                from app.person_ids import account_person
+                li_person = account_person(db, "linkedin", contact["url"])
+                ig_person = account_person(db, "instagram", handle)
+                if li_person is not None and li_person == ig_person:
+                    continue
                 suggestions.append((contact, handle))
     return suggestions
 
