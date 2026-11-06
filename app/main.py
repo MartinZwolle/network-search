@@ -16,6 +16,8 @@ from app.instagram import migrate as migrate_instagram, import_archive
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
+from app.manual import migrate as migrate_manual, create_person, rename_person, search_manual, display_name as farley_display_name, save_job, delete_manual_job
+from app.person_ids import merge_people
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
@@ -24,7 +26,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.9.0"
 
 
 def footer():
@@ -70,6 +72,7 @@ with connect() as _db:
     migrate_identities(_db)
     migrate_person_ids(_db)
     migrate_context(_db)
+    migrate_manual(_db)
     sync_person_ids(_db)
 
 
@@ -237,6 +240,75 @@ def manual_link(linkedin_contact: str = Form(...), instagram_username: str = For
     return RedirectResponse("/matches?linked=1", status_code=303)
 
 
+@app.post("/person/new")
+def new_person(name: str = Form(...)):
+    with connect() as db:
+        try:
+            pid = create_person(db, name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(pid), status_code=303)
+
+
+@app.post("/person/{person_id}/name")
+def update_person_name(person_id: int, name: str = Form(...)):
+    with connect() as db:
+        try:
+            rename_person(db, person_id, name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(person_id), status_code=303)
+
+
+@app.post("/person/{person_id}/job")
+def update_person_job(person_id: int, kind: str = Form("new"),
+                      job_id: int = Form(0), company: str = Form(""),
+                      title: str = Form(""), started: str = Form(""),
+                      ended: str = Form(""), note: str = Form("")):
+    with connect() as db:
+        try:
+            if kind not in ("new", "manual", "import"):
+                raise ValueError("Onbekend functietype")
+            save_job(db, person_id, company, title, started, ended, note,
+                     job_id=job_id if kind == "manual" else None,
+                     history_id=job_id if kind == "import" else None)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(person_id), status_code=303)
+
+
+@app.post("/person/{person_id}/job/delete")
+def remove_person_job(person_id: int, job_id: int = Form(...)):
+    with connect() as db:
+        try:
+            delete_manual_job(db, person_id, job_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(person_id), status_code=303)
+
+
+@app.post("/person/{person_id}/attach")
+def attach_existing_social(person_id: int, platform: str = Form(...),
+                           account: str = Form(...)):
+    key = account.strip()
+    if platform not in ("linkedin", "instagram"):
+        raise HTTPException(400, "Alleen bestaande LinkedIn- en Instagram-accounts")
+    if platform == "instagram":
+        key = key.lstrip("@").casefold()
+    with connect() as db:
+        destination = person_details(db, person_id)
+        if destination is None:
+            raise HTTPException(404, "Persoon niet gevonden")
+        source_id = account_person(db, platform, key)
+        if source_id is None:
+            raise HTTPException(400, "Account nog niet geïmporteerd. Gebruik de exacte profiel-URL of gebruikersnaam.")
+        try:
+            merge_people(db, destination[0], source_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(person_id), status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(q: str = "", imported: int = 0, ig_imported: int = -1):
     with connect() as db:
@@ -287,6 +359,15 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
                         break
         suggestions = identity_candidates(db, contacts, ig_results) if q.strip() else []
         people_results = merged_contacts(db, contacts, ig_results) if q.strip() else []
+        if q.strip():
+            present_ids = {account_person(db, "linkedin", row["url"]) if source == "linkedin"
+                           else account_person(db, "instagram", row["username"])
+                           for source, row in people_results}
+            for row in search_manual(db, q):
+                pid = row["person_id"]
+                if pid not in present_ids:
+                    people_results.append(("manual", row))
+                    present_ids.add(pid)
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Farley File</title><link rel="icon" type="image/svg+xml" href="/static/farley-logo.svg"><style>
@@ -308,6 +389,11 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
+    <section><h2>Persoon handmatig toevoegen</h2>
+    <p class="muted">Ook zonder LinkedIn, Instagram of Facebook. Later kun je accounts toevoegen.</p>
+    <form method="post" action="/person/new">
+    <input type="text" name="name" required maxlength="160" placeholder="Voor- en achternaam">
+    <button type="submit">Persoon toevoegen</button></form></section>
     <section><h2>Zoeken</h2><form method="get">
     <input name="q" type="text" value="{escape(q, quote=True)}"
            placeholder="Naam, werkgever, functie of gesprek">
@@ -339,7 +425,13 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     if q.strip():
         page += f'<section><h2>Personen ({len(people_results)} getoond)</h2>'
         for source, person in people_results:
-            if source == "linkedin":
+            if source == "manual":
+                display_name = person["display_name"]
+                person_link = "/person/" + str(person["person_id"])
+                social_labels = "Persoonlijk toegevoegd"
+                note = "Geen gekoppelde sociale accounts" if not db else ""
+                count = ""
+            elif source == "linkedin":
                 display_name = " ".join(filter(None, [person["first_name"], person["last_name"]]))
                 person_link = "/person/" + str(account_person(db, "linkedin", person["url"]))
                 with connect() as links_db:
