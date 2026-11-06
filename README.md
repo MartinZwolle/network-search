@@ -2,7 +2,15 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.7.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.8.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Persoonlijk dossier en netwerktags (v0.8.0)
+
+- **Bewerkbare persoonsinformatie:** vier optionele velden op iedere profielpagina: *Hoe ken ik deze persoon?*, *Achtergrond*, *Interesses* (komma-gescheiden) en *Wat wil ik onthouden?*. Alles blijft opgeslagen bij volgende imports.
+- **Overlappende netwerken:** voeg meerdere `#tags` toe aan een persoon, bijvoorbeeld `#wehkamp, #bierproefclub`. Interesses en netwerktags zijn gescheiden: interesses beschrijven onderwerpen; netwerktags groeperen mensen.
+- **Nieuw tabblad Netwerktags:** toont alle groepen met aantallen; klik op een tag voor de unieke personen in die groep. Een persoon kan in veel groepen zitten, zonder duplicatie.
+- **Accounts samenvoegen:** reeds handmatig ingevulde context en tags van beide profielen blijven bewaard wanneer je accounts koppelt. Gespreksverslagen blijven in Obsidian; geen dubbele opslag.
+- **Privacy:** tags en notities zijn privé, net als de rest van Farley File; zet de app niet zonder authenticatie open naar internet.
 
 ## Farley File & Obsidian (v0.7.0)
 
@@ -96,7 +104,8 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [x] Eerste handmatige koppeling LinkedIn ↔ Instagram, met suggesties en ontkoppelen
 - [ ] Uitbreiding naar een universeel personenmodel (ook voor Facebook)
 - [x] Farley File-naam, permanente personenlinks en Obsidian-notitiekoppeling
-- [ ] Verdere persoonlijke context (hoe kennen we elkaar?) zonder Obsidian-gespreksverslagen te dupliceren
+- [x] Bewerkbaar persoonsdossier: hoe ken ik iemand, achtergrond, interesses en geheugensteuntjes
+- [x] Overlappende netwerktags met overzichtspagina's
 - [ ] Eventueel een Monica-integratie als daar later behoefte aan is
 - [ ] Verdere zoekverbeteringen, eventueel optionele lokale semantische zoekfunctie
 
