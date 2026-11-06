@@ -16,7 +16,7 @@ from app.instagram import migrate as migrate_instagram, import_archive
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
-from app.manual import migrate as migrate_manual, create_person, rename_person, search_manual, display_name as farley_display_name, save_job, delete_manual_job
+from app.manual import migrate as migrate_manual, create_person, rename_person, search_manual, display_name as farley_display_name, save_job, delete_manual_job, possible_duplicates, delete_person
 from app.person_ids import merge_people
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
@@ -241,13 +241,78 @@ def manual_link(linkedin_contact: str = Form(...), instagram_username: str = For
 
 
 @app.post("/person/new")
-def new_person(name: str = Form(...)):
+def new_person(name: str = Form(...), confirmed: str = Form("")):
+    name = " ".join(name.split())
+    if not 2 <= len(name) <= 160:
+        raise HTTPException(400, "Naam moet tussen 2 en 160 tekens lang zijn")
     with connect() as db:
+        matches = possible_duplicates(db, name)
+        if matches and confirmed != "yes":
+            html = ('<!doctype html><html lang="nl"><meta charset="utf-8">'
+                    '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                    '<title>Bestaat deze persoon al? · Farley File</title>'
+                    '<style>body{font:16px/1.6 system-ui,sans-serif;max-width:780px;'
+                    'margin:40px auto;padding:20px;background:#f5f7f6;color:#252b30}'
+                    'section{background:#fff;padding:26px;border:1px solid #dde6e5}'
+                    'a{color:#087f80}button{background:#087f80;color:#fff;'
+                    'border:0;padding:12px 16px;cursor:pointer;font:inherit}'
+                    'article{padding:12px 0;border-bottom:1px solid #dde6e5}'
+                    '</style><section><h1>Deze persoon ken je misschien al</h1>'
+                    f'<p>Je wilt <strong>{escape(name)}</strong> toevoegen, maar '
+                    'er bestaat al een profiel met dezelfde naam.</p>')
+            for match in matches:
+                html += (f'<article><a href="/person/{match["id"]}">'
+                         f'{escape(match["name"])}</a>'
+                         f' · {escape(match["platforms"] or "handmatig profiel")}</article>')
+            html += (f'<p><a href="/">← Annuleren</a></p>'
+                     '<p>Toch een afzonderlijke persoon met deze naam?</p>'
+                     '<form method="post" action="/person/new">'
+                     f'<input type="hidden" name="name" value="{escape(name,quote=True)}">'
+                     '<input type="hidden" name="confirmed" value="yes">'
+                     '<button type="submit">Toch nieuw profiel aanmaken</button>'
+                     '</form></section></html>')
+            return HTMLResponse(html)
         try:
             pid = create_person(db, name)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
     return RedirectResponse("/person/" + str(pid), status_code=303)
+
+
+@app.post("/person/{person_id}/merge")
+def merge_duplicate_person(person_id: int, target_id: int = Form(...),
+                           confirmed: str = Form("")):
+    if confirmed != "yes":
+        raise HTTPException(400, "Bevestiging vereist")
+    with connect() as db:
+        source = person_details(db, person_id)
+        target = person_details(db, target_id)
+        if source is None or target is None or source[0] == target[0]:
+            raise HTTPException(400, "Selecteer twee verschillende bestaande profielen")
+        # A manual profile may be merged into an imported profile, not vice versa.
+        manually_added = db.execute(
+            "SELECT created_manually FROM farley_person_names WHERE person_id=?",
+            (source[0],)
+        ).fetchone()
+        if not manually_added or not manually_added["created_manually"] or source[1]:
+            raise HTTPException(400, "Alleen losse, handmatig aangemaakte personen samenvoegen")
+        try:
+            merge_people(db, target[0], source[0])
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/person/" + str(target_id), status_code=303)
+
+
+@app.post("/person/{person_id}/delete")
+def remove_manual_person(person_id: int, confirmed: str = Form("")):
+    if confirmed != "delete":
+        raise HTTPException(400, "Bevestiging vereist")
+    with connect() as db:
+        try:
+            delete_person(db, person_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/", status_code=303)
 
 
 @app.post("/person/{person_id}/name")
