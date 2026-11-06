@@ -4,6 +4,7 @@ Never infer a shared person solely from similar names. Normalization only
 provides suggestions, and only the user can confirm a link.
 """
 import re
+from app.person_ids import merge as merge_person_ids, detach_instagram
 from datetime import datetime, timezone
 
 
@@ -76,13 +77,20 @@ def link(db, linkedin_url, instagram_username):
         "INSERT OR IGNORE INTO profile_links VALUES (?, ?, ?)",
         (linkedin_url, instagram_username, datetime.now(timezone.utc).isoformat()),
     )
+    merge_person_ids(db, linkedin_url, instagram_username)
 
 
 def unlink(db, linkedin_url, instagram_username):
+    existing = db.execute(
+        "SELECT 1 FROM profile_links WHERE linkedin_url=? AND instagram_username=?",
+        (linkedin_url, instagram_username),
+    ).fetchone()
     db.execute(
         "DELETE FROM profile_links WHERE linkedin_url=? AND instagram_username=?",
         (linkedin_url, instagram_username),
     )
+    if existing:
+        detach_instagram(db, instagram_username)
 
 
 def all_candidates(db):
