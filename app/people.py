@@ -8,6 +8,7 @@ from html import escape
 from urllib.parse import quote
 from fastapi import HTTPException
 from app.person_ids import account_person, details as person_details
+from app.context import get as get_context, person_tags
 
 CSS = """
 :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
@@ -105,13 +106,64 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
     name = (" ".join(filter(None, [contact["first_name"], contact["last_name"]]))
             if contact is not None else "@" + standalone["username"])
     nav = ('<a href="/">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a>'
-           ' · <a href="/matches">Mogelijke koppelingen</a>')
+           ' · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a>')
     html = ('<!doctype html><html lang="nl"><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<title>Persoon · Farley File</title><style>' + CSS + '</style>'
             '<header><span class="brand">Elegant Chaos / Labs</span>'
             f'<h1>{escape(name)}</h1><nav>{nav}</nav>'
             '<p class="muted">Eén persoon, meerdere sociale accounts.</p></header>')
+    if person_id is not None:
+        context = get_context(db, person_id)
+        net_tags = person_tags(db, person_id)
+        html += '<section><h2>Farley File · persoonlijk</h2>'
+        for label, key in (
+            ("Hoe ken ik deze persoon?", "how_known"),
+            ("Achtergrond", "background"),
+            ("Interesses", "interests"),
+            ("Wat wil ik onthouden?", "remember"),
+        ):
+            value = context[key]
+            if value:
+                html += (f'<article><strong>{escape(label)}</strong><br>'
+                         f'<span style="white-space:pre-wrap">{escape(value)}</span></article>')
+        if net_tags:
+            html += '<article><strong>Netwerken en groepen</strong><br>'
+            for tag in net_tags:
+                html += (f'<a href="/tags/{quote(tag,safe="")}" '
+                         f'style="display:inline-block;margin:5px 8px 5px 0;padding:3px 9px;'
+                         f'background:#e4f3f0;border-radius:4px">#{escape(tag)}</a>')
+            html += '</article>'
+        if not any(context.values()) and not net_tags:
+            html += '<p class="muted">Je hebt nog niets over deze persoon vastgelegd.</p>'
+        html += ('<details style="margin-top:18px"><summary style="color:#087f80;'
+                 'cursor:pointer;font-weight:700">✎ Persoonsgegevens bewerken</summary>'
+                 f'<form action="/person/{person_id}/context" method="post">')
+        fields = (
+            ("how_known", "Hoe ken ik deze persoon?", "Bijvoorbeeld: oud-collega bij Wehkamp", 2, 1000),
+            ("background", "Achtergrond", "Bijvoorbeeld: heeft een eigen brouwerij", 4, 4000),
+            ("interests", "Interesses (komma's)", "Bierbrouwen, muziek, fietsen", 2, 2000),
+            ("remember", "Wat wil ik onthouden?", "Vraag de volgende keer hoe het met ... gaat", 4, 4000),
+        )
+        for key, label, placeholder, rows, maximum in fields:
+            html += (f'<label for="ctx_{key}" style="display:block;margin-top:12px">'
+                     f'<strong>{escape(label)}</strong></label>'
+                     f'<textarea id="ctx_{key}" name="{key}" rows="{rows}" maxlength="{maximum}" '
+                     f'placeholder="{escape(placeholder,quote=True)}" '
+                     f'style="width:100%;max-width:720px;padding:10px;font:inherit;'
+                     f'border:1px solid #bdcbcb;border-radius:4px">'
+                     f'{escape(context[key])}</textarea>')
+        html += (f'<label for="ctx_tags" style="display:block;margin-top:12px">'
+                 '<strong>Netwerktags</strong></label>'
+                 '<p class="muted">Gebruik bijvoorbeeld #wehkamp, #bierproefclub. '
+                 'Eén persoon kan bij meerdere groepen horen.</p>'
+                 '<input id="ctx_tags" type="text" name="network_tags" '
+                 f'value="{escape(", ".join("#"+t for t in net_tags),quote=True)}" '
+                 'placeholder="#wehkamp, #bierproefclub" '
+                 'style="width:100%;max-width:720px;padding:10px;font:inherit;'
+                 'border:1px solid #bdcbcb;border-radius:4px"><br>'
+                 '<button type="submit" style="margin-top:16px">Opslaan</button>'
+                 '</form></details></section>')
     html += '<section><h2>Sociale accounts</h2>'
     if contact is not None:
         html += (f'<article><strong>LinkedIn</strong> · '
