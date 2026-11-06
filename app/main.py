@@ -7,18 +7,19 @@ import sqlite3
 from html import escape
 from pathlib import Path
 from urllib.parse import urlsplit, quote
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.search import query_expression, expanded_query
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
+from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Network Search")
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.5.1"
 
 
 def footer():
@@ -61,6 +62,7 @@ initialize()
 with connect() as _db:
     migrate_employment(_db)
     migrate_instagram(_db)
+    migrate_identities(_db)
 
 
 def profile_key(url):
@@ -187,6 +189,22 @@ async def upload_instagram(file: UploadFile = File(...)):
         "/?ig_imported=" + str(counts["inbox_messages"]), status_code=303)
 
 
+@app.post("/profile-link")
+def profile_link(linkedin_url: str = Form(...), instagram_username: str = Form(...),
+                 action: str = Form("link")):
+    with connect() as db:
+        try:
+            if action == "unlink":
+                unlink_profiles(db, linkedin_url, instagram_username)
+            elif action == "link":
+                link_profiles(db, linkedin_url, instagram_username)
+            else:
+                raise HTTPException(400, "Onbekende actie")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/contact?url=" + quote(linkedin_url, safe=""), status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(q: str = "", imported: int = 0, ig_imported: int = -1):
     with connect() as db:
@@ -200,6 +218,16 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
             # Instagram usernames and message text are separate from LinkedIn identities.
             like = "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             ig_results = db.execute("SELECT * FROM instagram_accounts WHERE username LIKE ? ESCAPE '\\' LIMIT 50", (like,)).fetchall()
+            # Also match "Ilse Wintermans" against @ilsewintermans.
+            compact_query = compact(q)
+            if compact_query:
+                known = {r["username"] for r in ig_results}
+                for row in db.execute("SELECT * FROM instagram_accounts"):
+                    if row["username"] not in known and compact_query in compact(row["username"]):
+                        ig_results.append(row)
+                        known.add(row["username"])
+                        if len(ig_results) >= 50:
+                            break
             ig_message_results = db.execute("SELECT * FROM instagram_messages WHERE content LIKE ? ESCAPE '\\' LIMIT 30", (like,)).fetchall()
         contacts = []
         messages = []
@@ -213,6 +241,7 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1):
                 JOIN messages m ON m.message_key=f.message_key
                 WHERE messages_fts MATCH ? ORDER BY bm25(messages_fts, 0.0, 3.0, 1.0) LIMIT 50""",
                 (query_expression(q),)).fetchall()
+        suggestions = identity_candidates(db, contacts, ig_results) if q.strip() else []
     page = f"""<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Network Search</title><style>
@@ -243,6 +272,18 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     </section>"""
     if q.strip() and expanded_query(q):
         page += '<p class="muted">Zoektermen uitgebreid met verwante functietitels en vaktermen (NL/EN). Dit is trefwoordzoeken, geen AI.</p>'
+    if suggestions:
+        page += '<section><h2>Mogelijk dezelfde persoon</h2><p class="muted">Alleen suggesties op basis van namen. Controleer de profielen vóór je bevestigt.</p>'
+        for contact, account in suggestions:
+            name = escape((contact["first_name"] or "") + " " + (contact["last_name"] or ""))
+            handle = escape(account["username"])
+            page += (f'<article><strong>{name}</strong> (LinkedIn) ↔ '
+                     f'<a href="https://www.instagram.com/{quote(account["username"], safe="")}/" target="_blank" rel="noopener noreferrer">@{handle}</a>'
+                     f'<form method="post" action="/profile-link">'
+                     f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
+                     f'<input type="hidden" name="instagram_username" value="{escape(account["username"], quote=True)}">'
+                     f'<button type="submit">Zelfde persoon — koppelen</button></form></article>')
+        page += '</section>'
     if q.strip():
         page += f"<section><h2>Contacten ({len(contacts)} getoond)</h2>"
         for contact in contacts:
@@ -300,6 +341,10 @@ def contact_detail(url: str):
         contact = db.execute("SELECT * FROM contacts WHERE url=?", (url,)).fetchone()
         if contact is None:
             raise HTTPException(404, "Contact niet gevonden")
+        linked_instagram = db.execute("""
+            SELECT instagram_username FROM profile_links
+            WHERE linkedin_url=? ORDER BY instagram_username
+        """, (url,)).fetchall()
         employment = db.execute("""
             SELECT company, position, first_seen_at, superseded_at
             FROM employment_history WHERE contact_url=? ORDER BY id DESC
@@ -329,6 +374,18 @@ def contact_detail(url: str):
     {conversations} gesprekken · {received} ontvangen · {sent} overige</p>
     <p>Laatste LinkedIn-bericht: {escape(last)}</p></section>
     """
+    if linked_instagram:
+        page += '<section><h2>Gekoppelde accounts</h2>'
+        for account in linked_instagram:
+            handle = escape(account["instagram_username"])
+            page += (f'<article><a href="https://www.instagram.com/{quote(account["instagram_username"], safe="")}/" '
+                     f'target="_blank" rel="noopener noreferrer">Instagram: @{handle}</a>'
+                     f'<form method="post" action="/profile-link">'
+                     f'<input type="hidden" name="linkedin_url" value="{escape(url, quote=True)}">'
+                     f'<input type="hidden" name="instagram_username" value="{escape(account["instagram_username"], quote=True)}">'
+                     f'<input type="hidden" name="action" value="unlink">'
+                     f'<button type="submit">Koppeling verwijderen</button></form></article>')
+        page += '</section>'
     page += contact_timeline(history, employment)
     page += """<section><h2>Werkhistorie (waargenomen)</h2>
     <p class="muted">Datums geven aan wanneer Network Search een functie
