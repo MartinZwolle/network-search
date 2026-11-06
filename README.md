@@ -1,8 +1,14 @@
 # Farley File
 
+![Farley File-logo](app/static/farley-logo.svg)
+
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
 > **Huidige versie: v0.8.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Logo
+
+Het Farley File-logo staat als schaalbare SVG in `app/static/farley-logo.svg` en verschijnt naast de titel op de startpagina, op persoonspagina’s en als browsericoon. Het bestand is onderdeel van de Docker-image; opnieuw bouwen is dus nodig bij een update.
 
 ## Persoonlijk dossier en netwerktags (v0.8.0)
 
