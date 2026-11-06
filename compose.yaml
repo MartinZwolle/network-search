@@ -1,0 +1,10 @@
+services:
+  network-search:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8098:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      DATA_DIR: /data
