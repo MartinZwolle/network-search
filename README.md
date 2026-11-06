@@ -6,6 +6,13 @@ Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere s
 
 > **Huidige versie: v0.9.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
+## Dubbele personen voorkomen en beheren (v0.9.x)
+
+- Bij handmatig toevoegen controleren we eerst of er al een persoon met **dezelfde volledige naam** bestaat. Je krijgt bestaande profielen te zien en kunt teruggaan, een bestaand profiel openen of bewust toch een nieuw profiel maken. Dit is alleen een suggestie: personen met dezelfde naam zijn niet automatisch dezelfde persoon.
+- Op een **los, handmatig aangemaakt profiel** verschijnen bestaande personen met exact dezelfde naam als voorstel voor **Samenvoegen**. Samenvoegen vraagt bevestiging, bewaart handmatige context, tags, functies en Obsidian-notities, en houdt een oude profiel-URL als redirect bruikbaar.
+- Je kunt ook een **handmatig profiel verwijderen**, inclusief de daarbij ingevulde gegevens, na expliciete bevestiging. Geïmporteerde of gekoppelde sociale profielen zijn niet via deze actie te verwijderen. Maak vóór wijzigingen in profielen altijd een databaseback-up.
+- De dubbele-namencontrole is voorlopig beperkt tot gelijke namen, afgezien van hoofdletters en spaties. Andere spellingen, naamswijzigingen en afkortingen kunnen nog als twee afzonderlijke personen voorkomen.
+
 ## Handmatige personen en werkhistorie (v0.9.0)
 
 - **Personen zonder socials:** maak op de startpagina een nieuw profiel met alleen een naam. Het krijgt meteen een permanent `/person/<id>`-adres. Het profiel is op naam te vinden; later kun je via de profielpagina een bestaand, al geïmporteerd LinkedIn- of Instagram-account expliciet aan dezelfde persoon koppelen.
