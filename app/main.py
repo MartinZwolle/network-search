@@ -65,7 +65,7 @@ def rebuild_links(db):
             lookup.setdefault(key, row["url"])
     db.execute("DELETE FROM contact_messages")
     for row in db.execute("SELECT message_key, sender_url, recipient_urls FROM messages"):
-        urls = [row["sender_url"]] + re.split(r"[,;\\s]+", row["recipient_urls"] or "")
+        urls = [row["sender_url"]] + re.split(r"[,;\s]+", row["recipient_urls"] or "")
         keys = {profile_key(url) for url in urls}
         for key in keys:
             if key in lookup:
