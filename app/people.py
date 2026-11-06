@@ -7,6 +7,7 @@ profile_links records are retained; we never merge by name automatically.
 from html import escape
 from urllib.parse import quote
 from fastapi import HTTPException
+from app.person_ids import account_person, details as person_details
 
 CSS = """
 :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
@@ -65,7 +66,14 @@ def merged_contacts(db, linkedin_results, instagram_results):
 
 
 def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
-            contact_timeline=None, profile_key=None):
+            contact_timeline=None, profile_key=None, person_id=None):
+    if person_id is not None:
+        info = person_details(db, person_id)
+        if info is None:
+            raise HTTPException(404, "Persoon niet gevonden")
+        person_id, stored_accounts = info
+        linkedin_url = next((r["account_key"] for r in stored_accounts if r["platform"] == "linkedin"), "")
+        instagram_username = next((r["account_key"] for r in stored_accounts if r["platform"] == "instagram"), "")
     if not linkedin_url and not instagram_username:
         raise HTTPException(400, "Selecteer een LinkedIn- of Instagram-account")
     if instagram_username:
@@ -91,6 +99,9 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
            WHERE l.linkedin_url=? ORDER BY a.username""", (linkedin_url,)
     ).fetchall() if contact is not None else [standalone]
 
+    if person_id is None:
+        person_id = (account_person(db, "linkedin", linkedin_url) if contact is not None
+                     else account_person(db, "instagram", standalone["username"]))
     name = (" ".join(filter(None, [contact["first_name"], contact["last_name"]]))
             if contact is not None else "@" + standalone["username"])
     nav = ('<a href="/">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a>'
@@ -124,6 +135,42 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                      '<button type="submit" style="background:#69767a">Ontkoppelen</button></form>')
         html += '</article>'
     html += '</section>'
+    if person_id is not None:
+        html += (f'<section><h2>Obsidian · gespreksverslagen</h2>'
+                 '<p class="muted">Schrijf je gespreksverslagen in Obsidian en verwijs '
+                 'vanuit deze persoonspagina naar de notities. De inhoud wordt hier niet gekopieerd.</p>'
+                 f'<button type="button" id="copy-person-link" data-id="{person_id}" '
+                 f'data-name="{escape(name, quote=True)}">📋 Kopieer Markdown-link voor Obsidian</button>'
+                 '<span id="copy-status" role="status" style="margin-left:12px"></span>'
+                 '<script>document.getElementById("copy-person-link").addEventListener("click",async function(){'
+                 'const link=window.location.origin+"/person/"+this.dataset.id;'
+                 'const label="[👤 "+this.dataset.name+"]("+link+")";'
+                 'try{await navigator.clipboard.writeText(label);'
+                 'document.getElementById("copy-status").textContent="Gekopieerd!";}'
+                 'catch(e){window.prompt("Kopieer deze Markdown-link:",label);}'
+                 '});</script>')
+        notes = db.execute(
+            "SELECT id,title,target FROM farley_notes WHERE person_id=? ORDER BY id DESC",
+            (person_id,)
+        ).fetchall()
+        for note in notes:
+            html += (f'<article><a href="{escape(note["target"], quote=True)}">'
+                     f'{escape(note["title"])}</a>'
+                     '<form method="post" action="/obsidian-note/delete">'
+                     f'<input type="hidden" name="person_id" value="{person_id}">'
+                     f'<input type="hidden" name="note_id" value="{note["id"]}">'
+                     '<button type="submit" style="background:#69767a">Verwijder verwijzing</button>'
+                     '</form></article>')
+        html += (f'<form method="post" action="/obsidian-note/add">'
+                 f'<input type="hidden" name="person_id" value="{person_id}">'
+                 '<label for="note_title">Titel van de notitie</label><br>'
+                 '<input id="note_title" type="text" name="title" maxlength="160" required '
+                 'style="width:min(100%,480px);padding:10px"><br>'
+                 '<label for="note_target">Obsidian-link (obsidian://...)</label><br>'
+                 '<input id="note_target" type="text" name="target" maxlength="2048" required '
+                 'placeholder="obsidian://open?vault=..." '
+                 'style="width:min(100%,480px);padding:10px"><br>'
+                 '<button type="submit">Notitielink toevoegen</button></form></section>')
 
     # The search is on the person's profile and can be started from EITHER source.
     html += ('<section><h2>Een account aan deze persoon koppelen</h2>'
