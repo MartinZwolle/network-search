@@ -70,9 +70,9 @@ def import_archive(db, content):
             name = member.filename.replace("\\", "/").lower()
             path = "/" + name.lstrip("/")
             follow = (path.endswith("/connections/followers_and_following/following.json")
-                      or re.search(r"/connections/followers_and_following/followers_\\d+\\.json$", path))
+                      or re.search(r"/connections/followers_and_following/followers_\d+\.json$", path))
             inbox = ("/your_instagram_activity/messages/inbox/" in path
-                     and re.search(r"/message_\\d+\\.json$", path))
+                     and re.search(r"/message_\d+\.json$", path))
             if member.is_dir() or not (follow or inbox):
                 continue
             if member.file_size > MAX_JSON_FILE:
@@ -114,7 +114,7 @@ def import_archive(db, content):
         # New snapshots replace follow/follower flags, without altering history of messages.
         # Only update flags for categories actually present in the archive.
         has_following = any(m.filename.lower().endswith("/following.json") for m, a, _ in selected if a)
-        has_followers = any(re.search(r"/followers_\\d+\\.json$", m.filename.lower()) for m, a, _ in selected if a)
+        has_followers = any(re.search(r"/followers_\d+\.json$", m.filename.lower()) for m, a, _ in selected if a)
         if has_following:
             db.execute("UPDATE instagram_accounts SET follows=0")
         if has_followers:
