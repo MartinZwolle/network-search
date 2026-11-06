@@ -1,6 +1,7 @@
 import sqlite3
 import unittest
 from app.identities import compact, migrate, candidates, link, unlink, reject, restore, resolve_contact, all_candidates
+from app.person_ids import migrate as migrate_people, sync as sync_people
 
 
 class IdentityTests(unittest.TestCase):
@@ -15,6 +16,8 @@ class IdentityTests(unittest.TestCase):
         INSERT INTO instagram_accounts VALUES ('ilsesomethingelse');
         """)
         migrate(self.db)
+        migrate_people(self.db)
+        sync_people(self.db)
 
     def test_compact_search_and_confirmation(self):
         self.assertEqual(compact("Ilse Wintermans"), "ilsewintermans")
