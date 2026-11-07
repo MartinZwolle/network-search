@@ -125,7 +125,7 @@ def import_archive(db, content):
             # Ignore photos, posts and all other unrelated export data.
             if path.endswith("/friends/your_friends.json"):
                 friend_docs.append(member)
-            elif re.search(r"/inbox/[^/]+/message_\\d+\\.json$",path):
+            elif re.search(r"/inbox/[^/]+/message_\d+\.json$",path):
                 thread_docs.append(member)
         if not friend_docs and not thread_docs:
             raise ValueError("Geen Facebook-vriendenlijst of inboxberichten gevonden")
@@ -195,7 +195,7 @@ def import_archive(db, content):
                     stamp = 0
                 # The repeated export preserves a stable message payload.
                 message_id = hashlib.sha256(
-                    (thread_id+"\\0"+str(stamp)+"\\0"+sender_name+"\\0"+body).encode("utf-8")
+                    (thread_id+"\0"+str(stamp)+"\0"+sender_name+"\0"+body).encode("utf-8")
                 ).hexdigest()
                 cur = db.execute(
                     """INSERT OR IGNORE INTO facebook_messages
@@ -215,7 +215,7 @@ def import_archive(db, content):
 
 def find_messages(db, query, limit=30):
     """Use a safe quoted FTS phrase, or no results for malformed input."""
-    words = [word for word in re.split(r"\\s+",query.strip()) if word]
+    words = [word for word in re.split(r"\s+",query.strip()) if word]
     if not words:
         return []
     phrase = " ".join(words).replace('"','""')
