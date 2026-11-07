@@ -1,21 +1,34 @@
-"""Resolve message authors only when a reliable LinkedIn account match exists.
+"""Link message authors to known contacts using verified LinkedIn profile URLs.
 
-Never infer identity from a displayed name: names can collide.
+Never guess a person from display name alone.
 """
+from urllib.parse import urlsplit
 from app.person_ids import account_person
 
 
-def sender_person_id(db, message):
-    """Use the importer's LinkedIn URL key, falling back to an unambiguous
-    contact_message relation for exports where the sender URL was missing.
-    """
-    from app.main import profile_key  # Local import; used only after app starts.
-    sender_key = profile_key(message["sender_url"] or "")
-    if sender_key:
-        urls = db.execute("SELECT url FROM contacts").fetchall()
-        for row in urls:
-            if profile_key(row["url"]) == sender_key:
-                return account_person(db, "linkedin", row["url"])
-        return None
-    # An absent URL does not prove the sender is the contact in a conversation.
-    return None
+def linkedin_key(url):
+    text = (url or "").strip()
+    if not text:
+        return ""
+    path = urlsplit(text if "://" in text else "https://" + text).path
+    path = path.rstrip("/").casefold()
+    return path if path.startswith("/in/") else ""
+
+
+def contact_lookup(db):
+    """Build a single lookup for an entire search page."""
+    lookup = {}
+    for row in db.execute("SELECT url FROM contacts"):
+        key = linkedin_key(row["url"])
+        if key:
+            pid = account_person(db, "linkedin", row["url"])
+            if pid is not None:
+                # Do not choose arbitrarily when imported URLs collide.
+                lookup.setdefault(key, pid)
+    return lookup
+
+
+def author_profile(message, lookup):
+    """Return a stable person ID only when sender_url identifies a known contact."""
+    key = linkedin_key(message["sender_url"])
+    return lookup.get(key) if key else None
