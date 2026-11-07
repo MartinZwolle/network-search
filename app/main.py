@@ -501,9 +501,13 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: in
                     people_results.append(("facebook",fb))
                     fb_seen.add(pid)
         if q.strip():
-            present_ids = {account_person(db, "linkedin", row["url"]) if source == "linkedin"
-                           else account_person(db, "instagram", row["username"])
-                           for source, row in people_results}
+            present_ids = {
+                account_person(db, "linkedin", row["url"]) if source == "linkedin"
+                else account_person(db, "instagram", row["username"]) if source == "instagram"
+                else account_person(db, "facebook", row["fb_key"]) if source == "facebook"
+                else row["person_id"]
+                for source, row in people_results
+            }
             for row in search_manual(db, q):
                 pid = row["person_id"]
                 if pid not in present_ids:
