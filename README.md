@@ -6,6 +6,16 @@ Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere s
 
 > **Huidige versie: v0.9.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
+## Facebook-import (v0.9.x, nog te testen op homeserver)
+
+- **Import vanuit JSON-ZIP:** de Facebook-export wordt lokaal verwerkt. De importer kijkt alleen naar `friends/your_friends.json` en `inbox/<thread>/message_*.json`, waarbij een extra bovenliggende map geen probleem is.
+- **Vrienden en gesprekken:** de vriendenlijst en de namen van gespreksdeelnemers worden als afzonderlijke Facebook-identiteiten opgeslagen; alle beschikbare tekstberichten zijn doorzoekbaar. Foto's, video's en andere media worden niet geïmporteerd. Bijlagen worden niet opgeslagen.
+- **Gesprekken per profiel:** Facebook-personen tonen betrokken gesprekken en groepsgesprekken. Vanuit zoekresultaten kun je ook direct een gesprek openen.
+- **Accountkoppeling:** Facebook-profielen worden **nooit automatisch** samengevoegd met bestaande LinkedIn-/Instagram-profielen op basis van een naam. Op de persoonspagina kan een geïmporteerde Facebook-identiteit handmatig aan een andere persoon worden gekoppeld.
+- **Herhaalbaar:** herhaalde imports slaan identieke tekstberichten niet opnieuw op en raken handmatig toegevoegde gegevens niet.
+- **Beperkingen:** Facebook geeft vaak geen betrouwbare unieke profiel-ID in de export. Personen met exact dezelfde naam kunnen daarom één Facebook-naamidentiteit delen; controleer samenvoegingen altijd zelf. Sommige berichten kunnen enkel uit media of verwijderde inhoud bestaan en worden dan overgeslagen. Deze versie is nog niet op de echte homeserver getest.
+- **Omvang:** maximaal 128 MB ZIP; als het oorspronkelijke archief groter is, maak dan een kleinere ZIP of verwijder uitsluitend de mediabestanden uit een kopie. De originele export hoeft niet in de repository of database.
+
 ## Berichten: doorklikken naar personen (v0.9.x)
 
 - In de LinkedIn-zoekresultaten is de afzender aanklikbaar **als de profiel-URL van de afzender betrouwbaar overeenkomt met een geïmporteerd contact**. De link opent de permanente `/person/<id>`-pagina.
@@ -126,7 +136,7 @@ Contacten zonder profiel-URL worden op dit moment niet geïmporteerd; koppeling 
 - [x] Basis-relatieanalyse: frequentie per jaar en laatste herkende LinkedIn-bericht
 - [ ] Uitgebreide relatieanalyse: wederkerigheid, filters en selectie voor Monica
 - [x] Instagram: volgers, gevolgde accounts en inbox-tekst importeren
-- [ ] Facebook-export ondersteunen
+- [x] Facebook-export JSON: vrienden, inboxtekst en per-persoon-gesprekken (nog lokaal testen)
 - [x] Eén persoonspagina voor LinkedIn en Instagram, handmatig koppelen vanuit beide richtingen en zoekresultaten ontdubbelen
 - [x] Eerste handmatige koppeling LinkedIn ↔ Instagram, met suggesties en ontkoppelen
 - [ ] Uitbreiding naar een universeel personenmodel (ook voor Facebook)
