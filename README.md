@@ -4,9 +4,9 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.9.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.10.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
-## Facebook-import (v0.9.x, nog te testen op homeserver)
+## Facebook-import (v0.10.0, nog te testen op homeserver)
 
 - **Import vanuit JSON-ZIP:** de Facebook-export wordt lokaal verwerkt. De importer kijkt alleen naar `friends/your_friends.json` en `inbox/<thread>/message_*.json`, waarbij een extra bovenliggende map geen probleem is.
 - **Vrienden en gesprekken:** de vriendenlijst en de namen van gespreksdeelnemers worden als afzonderlijke Facebook-identiteiten opgeslagen; alle beschikbare tekstberichten zijn doorzoekbaar. Foto's, video's en andere media worden niet geïmporteerd. Bijlagen worden niet opgeslagen.
