@@ -254,6 +254,18 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  '<label>Toelichting<br><textarea name="note" maxlength="2000"></textarea></label><br>'
                  '<button type="submit">Functie toevoegen</button></form></details></section>')
     html += '<section><h2>Sociale accounts</h2>'
+    if person_id is not None:
+        fb_keys = [a["account_key"] for a in person_details(db, person_id)[1]
+                   if a["platform"] == "facebook"]
+        for fb_key in fb_keys:
+            fb = db.execute("SELECT display_name,friend,friend_since FROM facebook_people WHERE fb_key=?",
+                            (fb_key,)).fetchone()
+            if fb:
+                html += (f'<article><strong>Facebook</strong> · {escape(fb["display_name"])}'
+                         f' <small>{"· Facebook-vriend" if fb["friend"] else "· Gespreksdeelnemer"}'
+                         f'{" · sinds " + escape(fb["friend_since"]) if fb["friend_since"] else ""}'
+                         '</small></article>')
+
     if contact is not None:
         html += (f'<article><strong>LinkedIn</strong> · '
                  f'<a href="{escape(linkedin_url, quote=True)}" target="_blank" rel="noopener noreferrer">'
@@ -327,8 +339,8 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  f'<form method="post" action="/person/{person_id}/attach">'
                  '<label>Platform<br><select name="platform">'
                  '<option value="linkedin">LinkedIn</option>'
-                 '<option value="instagram">Instagram</option></select></label><br>'
-                 '<label>LinkedIn-profiel-URL of Instagram-gebruikersnaam<br>'
+                 '<option value="instagram">Instagram</option><option value="facebook">Facebook</option></select></label><br>'
+                 '<label>LinkedIn-URL, Instagram-gebruikersnaam of Facebook-naam<br>'
                  '<input type="text" name="account" required maxlength="600" '
                  'style="width:min(100%,480px);padding:10px"></label><br>'
                  '<button type="submit">Account koppelen</button></form></section>')
@@ -413,6 +425,30 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                      f'{escape(msg["sender"] or "")}</small>'
                      f'<h3>{escape(msg["subject"] or "(geen onderwerp)")}</h3>'
                      f'<pre>{escape(msg["content"] or "")}</pre></article>')
+        html += '</section>'
+    if person_id is not None:
+        fb_keys = [a["account_key"] for a in person_details(db, person_id)[1]
+                   if a["platform"] == "facebook"]
+        html += '<section><h2>Facebook-gesprekken</h2>'
+        if fb_keys:
+            placeholders = ",".join("?" for _ in fb_keys)
+            threads = db.execute(
+                f"""SELECT DISTINCT t.id,t.title,t.is_group,
+                    (SELECT count(*) FROM facebook_messages m WHERE m.thread_id=t.id) AS messages
+                    FROM facebook_threads t JOIN facebook_thread_people tp ON tp.thread_id=t.id
+                    WHERE tp.fb_key IN ({placeholders})
+                    ORDER BY messages DESC LIMIT 100""",
+                fb_keys,
+            ).fetchall()
+            for thread in threads:
+                html += (f'<article><a href="/facebook/thread/{escape(thread["id"],quote=True)}">'
+                         f'{escape(thread["title"] or "Facebook-gesprek")}</a>'
+                         f' · <small>{thread["messages"]} berichten'
+                         f'{" · groepsgesprek" if thread["is_group"] else ""}</small></article>')
+            if not threads:
+                html += '<p class="muted">Geen Facebook-gesprekken gevonden.</p>'
+        else:
+            html += '<p class="muted">Geen Facebook-account gekoppeld.</p>'
         html += '</section>'
     html += ('<section><h2>Instagram-berichten</h2>'
              '<p class="muted">Instagram-inboxberichten zijn nog niet betrouwbaar aan '
