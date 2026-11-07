@@ -4,7 +4,13 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.11.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.11.1** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Netwerkactiviteit over alle platforms (v0.11.1)
+
+De pagina **Netwerkactiviteit** combineert nu historische LinkedIn-, Instagram- en Facebook-tekstberichten. Filter per platform, bekijk berichten per jaar en open de tabel met jaartotalen per bron. De lijst *Contacten om opnieuw te bekijken* combineert gekoppelde profielen op basis van herleidbare berichtrecords. Afzenders zonder betrouwbare Instagram-identiteit worden wel meegeteld in de algemene statistiek, maar niet aan een persoonsprofiel gekoppeld. Facebook-groepsberichten worden als groepsactiviteit gemarkeerd.
+
+**Let op:** laatste *geregistreerde* bericht is niet hetzelfde als het laatste echte contact, en de importhistorie van de platformen heeft verschillende dekkingen. Twitter kan later worden toegevoegd zonder de LinkedIn-geschiedenis te vervangen.
 
 ## Slimmere koppelvoorstellen (v0.11.0)
 
