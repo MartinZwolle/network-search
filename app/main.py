@@ -23,7 +23,7 @@ from app.person_ids import migrate as migrate_person_ids, sync as sync_person_id
 from app.context import migrate as migrate_context, save as save_context
 from app.manual import migrate as migrate_manual, create_person, rename_person, search_manual, display_name as farley_display_name, save_job, delete_manual_job, possible_duplicates, delete_person
 from app.person_ids import merge_people
-from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact
+from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact, migrate_facebook_matches, facebook_candidates, reject_facebook_match
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
@@ -79,6 +79,7 @@ with connect() as _db:
     migrate_context(_db)
     migrate_manual(_db)
     migrate_facebook(_db)
+    migrate_facebook_matches(_db)
     sync_person_ids(_db)
 
 
@@ -829,10 +830,37 @@ def activity_page():
     return page + overview + footer() + "</html>"
 
 
+@app.post("/facebook-match")
+def facebook_match(facebook_key: str = Form(...), target_person_id: int = Form(...),
+                   action: str = Form(...), confirmed: str = Form("")):
+    if action not in ("link", "reject"):
+        raise HTTPException(400, "Onbekende actie")
+    with connect() as db:
+        source_id = account_person(db, "facebook", facebook_key)
+        target = person_details(db, target_person_id)
+        if source_id is None or target is None:
+            raise HTTPException(404, "Profiel niet gevonden")
+        if action == "reject":
+            reject_facebook_match(db, facebook_key, target[0])
+        else:
+            if confirmed != "yes":
+                raise HTTPException(400, "Bevestiging vereist")
+            if source_id == target[0]:
+                raise HTTPException(400, "Deze profielen zijn al gekoppeld")
+            # Facebook exports can identify people by name alone. Never merge
+            # without an explicit target and a user confirmation.
+            try:
+                merge_people(db, target[0], source_id)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/matches?linked=1", status_code=303)
+
+
 @app.get("/matches", response_class=HTMLResponse)
 def possible_matches(page: int = 1, linked: int = 0):
     with connect() as db:
         suggestions = all_candidates(db)
+        facebook_suggestions = facebook_candidates(db)
         linked_count = db.execute("SELECT COUNT(*) FROM profile_links").fetchone()[0]
         rejected_rows = db.execute("""SELECT r.linkedin_url, r.instagram_username,
             c.first_name, c.last_name FROM profile_rejections r
@@ -927,4 +955,41 @@ def possible_matches(page: int = 1, linked: int = 0):
                  f'<input type="hidden" name="source" value="matches">'
                  f'<button type="submit">Afwijzing ongedaan maken</button></form></article>')
     html += '</section></details>'
+    fb_total = len(facebook_suggestions)
+    fb_size = 30
+    fb_pages = max(1, (fb_total + fb_size - 1) // fb_size)
+    fb_page = min(page, fb_pages)
+    fb_visible = facebook_suggestions[(fb_page-1)*fb_size:fb_page*fb_size]
+    html += (f'<section id="facebook"><h2>Facebook ↔ bestaande personen ({fb_total})</h2>'
+             '<p class="muted">Voorstellen op basis van exact dezelfde naam. '
+             'Een naam alleen bewijst niet dat het dezelfde persoon is. '
+             'Controleer beide profielen; er wordt nooit automatisch gekoppeld.</p>')
+    if not fb_visible:
+        html += '<p>Geen nieuwe Facebook-voorstellen op deze pagina.</p>'
+    for item in fb_visible:
+        fb_name = escape(item["facebook_name"])
+        target_name = escape(item["target_name"])
+        fb_pid = item["facebook_person_id"]
+        target_pid = item["target_person_id"]
+        key = escape(item["facebook_key"], quote=True)
+        html += (f'<article><strong>{fb_name}</strong> (Facebook)'
+                 f' ↔ <strong>{target_name}</strong> ({escape(item["platforms"])})<br>'
+                 f'<a href="/person/{fb_pid}">Facebook-profiel bekijken</a> · '
+                 f'<a href="/person/{target_pid}">Bestaand profiel bekijken</a>'
+                 f'<form method="post" action="/facebook-match" '
+                 'onsubmit="return confirm(\'Weet je zeker dat dit dezelfde persoon is? '
+                 'De profielen en hun gegevens worden samengevoegd.\')">'
+                 f'<input type="hidden" name="facebook_key" value="{key}">'
+                 f'<input type="hidden" name="target_person_id" value="{target_pid}">'
+                 '<input type="hidden" name="action" value="link">'
+                 '<input type="hidden" name="confirmed" value="yes">'
+                 '<button type="submit">Zelfde persoon — koppelen</button></form>'
+                 '<form method="post" action="/facebook-match">'
+                 f'<input type="hidden" name="facebook_key" value="{key}">'
+                 f'<input type="hidden" name="target_person_id" value="{target_pid}">'
+                 '<input type="hidden" name="action" value="reject">'
+                 '<button type="submit" style="background:#69767a">Niet dezelfde persoon</button>'
+                 '</form></article>')
+    html += (f'<p>Facebook-voorstellen: pagina {fb_page} van {fb_pages}. '
+             'Gebruik de paginering bovenaan om meer voorstellen te bekijken.</p></section>')
     return html + footer() + '</html>'
