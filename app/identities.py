@@ -176,3 +176,86 @@ def resolve_contact(db, value):
     if not matches:
         raise ValueError("Geen LinkedIn-contact met deze exacte naam gevonden")
     raise ValueError("Er zijn meerdere contacten met deze naam; gebruik de LinkedIn-profiel-URL")
+
+
+def migrate_facebook_matches(db):
+    """Persist explicit dismissals; imports never silently undo them."""
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS facebook_match_rejections (
+            facebook_key TEXT NOT NULL,
+            target_person_id INTEGER NOT NULL,
+            rejected_at TEXT NOT NULL,
+            PRIMARY KEY(facebook_key,target_person_id)
+        )
+    """)
+
+
+def facebook_candidates(db):
+    """Suggest Facebook-to-existing-person matches by *exact full name* only.
+
+    A Facebook name is not a verified unique ID. Never auto-merge.
+    Include LinkedIn, Instagram and user-created people, but only one
+    suggestion per canonical person.
+    """
+    from app.person_ids import account_person, resolve
+    from app.manual import display_name
+    rejected = {(r["facebook_key"],r["target_person_id"]) for r in db.execute(
+        "SELECT facebook_key,target_person_id FROM facebook_match_rejections"
+    )}
+    # A single exact name can identify multiple people; offer separate review
+    # options rather than choosing automatically.
+    others = {}
+    for row in db.execute("SELECT id FROM farley_people ORDER BY id"):
+        pid = resolve(db, row["id"])
+        if pid != row["id"]:
+            continue
+        accounts = db.execute(
+            "SELECT platform FROM farley_accounts WHERE person_id=?", (pid,)
+        ).fetchall()
+        platforms = {r["platform"] for r in accounts}
+        if not platforms.intersection({"linkedin","instagram"}) and not db.execute(
+            "SELECT 1 FROM farley_person_names WHERE person_id=?", (pid,)
+        ).fetchone():
+            continue
+        name = " ".join(display_name(db, pid).split())
+        if len(name) < 5:
+            continue
+        others.setdefault(name.casefold(),[]).append((pid,name,platforms))
+    results = []
+    for fb in db.execute("SELECT fb_key,display_name,friend FROM facebook_people ORDER BY display_name"):
+        key = fb["fb_key"]
+        fb_pid = account_person(db,"facebook",key)
+        name = " ".join(fb["display_name"].split()).casefold()
+        for pid,label,platforms in others.get(name,[]):
+            if pid == fb_pid or (key,pid) in rejected:
+                continue
+            # Never offer a destination that has a *different* Facebook
+            # identity, as the existing name-key is intentionally ambiguous.
+            attached_fb = db.execute(
+                "SELECT 1 FROM farley_accounts WHERE platform='facebook' AND person_id=?",
+                (pid,)
+            ).fetchone()
+            if attached_fb:
+                continue
+            results.append({
+                "facebook_key": key,"facebook_name": fb["display_name"],
+                "facebook_person_id": fb_pid,"target_person_id": pid,
+                "target_name":label,
+                "platforms":", ".join(sorted(platforms - {"facebook"})),
+                "friend":bool(fb["friend"]),
+            })
+    return results
+
+
+def reject_facebook_match(db, facebook_key, target_person_id):
+    from app.person_ids import details
+    if not db.execute("SELECT 1 FROM facebook_people WHERE fb_key=?",
+                      (facebook_key,)).fetchone():
+        raise ValueError("Facebook-contact niet gevonden")
+    info = details(db,target_person_id)
+    if info is None:
+        raise ValueError("Doelprofiel niet gevonden")
+    db.execute(
+        "INSERT OR IGNORE INTO facebook_match_rejections VALUES (?,?,?)",
+        (facebook_key,info[0],datetime.now(timezone.utc).isoformat())
+    )
