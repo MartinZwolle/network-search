@@ -6,6 +6,11 @@ Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere s
 
 > **Huidige versie: v0.9.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
 
+## Berichten: doorklikken naar personen (v0.9.x)
+
+- In de LinkedIn-zoekresultaten is de afzender aanklikbaar **als de profiel-URL van de afzender betrouwbaar overeenkomt met een geïmporteerd contact**. De link opent de permanente `/person/<id>`-pagina.
+- Afzenders zonder herkenbare LinkedIn-profiel-URL blijven gewone tekst; op naam alleen wordt nooit een koppeling gegokt. Instagram-inboxberichten worden pas gekoppeld als de export daarvoor voldoende betrouwbare accountgegevens bevat.
+
 ## Dubbele personen voorkomen en beheren (v0.9.x)
 
 - Bij handmatig toevoegen controleren we eerst of er al een persoon met **dezelfde volledige naam** bestaat. Je krijgt bestaande profielen te zien en kunt teruggaan, een bestaand profiel openen of bewust toch een nieuw profiel maken. Dit is alleen een suggestie: personen met dezelfde naam zijn niet automatisch dezelfde persoon.
