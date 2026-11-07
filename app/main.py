@@ -438,6 +438,10 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: in
         ig_messages_total = db.execute("SELECT count(*) FROM instagram_messages").fetchone()[0]
         ig_results = []
         ig_message_results = []
+        fb_results = []
+        fb_message_results = []
+        fb_people_total = db.execute("SELECT count(*) FROM facebook_people").fetchone()[0]
+        fb_message_total = db.execute("SELECT count(*) FROM facebook_messages").fetchone()[0]
         if q.strip():
             # Instagram usernames and message text are separate from LinkedIn identities.
             like = "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -453,6 +457,12 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: in
                         if len(ig_results) >= 50:
                             break
             ig_message_results = db.execute("SELECT * FROM instagram_messages WHERE content LIKE ? ESCAPE '\\' LIMIT 30", (like,)).fetchall()
+        if q.strip():
+            fb_results = db.execute(
+                "SELECT fb_key,display_name FROM facebook_people WHERE display_name LIKE ? ESCAPE '\\' LIMIT 50",
+                (like,),
+            ).fetchall()
+            fb_message_results = find_facebook_messages(db, q)
         contacts = []
         messages = []
         if query_expression(q):
@@ -479,6 +489,15 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: in
                         break
         suggestions = identity_candidates(db, contacts, ig_results) if q.strip() else []
         people_results = merged_contacts(db, contacts, ig_results) if q.strip() else []
+        if q.strip():
+            fb_seen = {account_person(db,"linkedin",row["url"]) if source=="linkedin"
+                       else account_person(db,"instagram",row["username"])
+                       for source,row in people_results}
+            for fb in fb_results:
+                pid = account_person(db,"facebook",fb["fb_key"])
+                if pid is not None and pid not in fb_seen:
+                    people_results.append(("facebook",fb))
+                    fb_seen.add(pid)
         if q.strip():
             present_ids = {account_person(db, "linkedin", row["url"]) if source == "linkedin"
                            else account_person(db, "instagram", row["username"])
@@ -545,7 +564,13 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
     if q.strip():
         page += f'<section><h2>Personen ({len(people_results)} getoond)</h2>'
         for source, person in people_results:
-            if source == "manual":
+            if source == "facebook":
+                person_link = "/person/" + str(account_person(db, "facebook", person["fb_key"]))
+                display_name = person["display_name"]
+                social_labels = "Facebook"
+                note = "Facebook-contact"
+                count = ""
+            elif source == "manual":
                 display_name = person["display_name"]
                 person_link = "/person/" + str(person["person_id"])
                 social_labels = "Persoonlijk toegevoegd"
