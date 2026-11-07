@@ -15,7 +15,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from app.search import query_expression, expanded_query
 from app.message_people import contact_lookup, author_profile
-from app.activity import contact_timeline, network_activity
+from app.activity import contact_timeline
+from app.activity_all import render as render_network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
 from app.facebook import migrate as migrate_facebook, import_archive as import_facebook, find_messages as find_facebook_messages
 from app.people import profile as render_profile, profile_url, merged_contacts
@@ -32,7 +33,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.11.0"
+APP_VERSION = "0.11.1"
 
 
 def footer():
@@ -805,9 +806,9 @@ def obsidian_note_delete(person_id: int = Form(...), note_id: int = Form(...)):
 
 
 @app.get("/activity", response_class=HTMLResponse)
-def activity_page():
+def activity_page(source: str = "all"):
     with connect() as db:
-        overview = network_activity(db)
+        overview = render_network_activity(db, source)
     page = """<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Netwerkactiviteit · Farley File</title>
