@@ -4,7 +4,18 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.10.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.11.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Slimmere koppelvoorstellen (v0.11.0)
+
+Op **Mogelijke koppelingen** worden naast de bestaande LinkedIn/Instagram-voorstellen ook voorstellen tussen Facebook, Instagram, LinkedIn en handmatig aangemaakte personen getoond. De aanwijzingen zijn transparant: exact gelijke namen (ongevoelig voor accenttekens), gebruikersnaam die overeenkomt met de naam, of sterk gelijkende namen mét dezelfde werkgever; gedeelde netwerktags geven extra context maar zijn nooit op zichzelf voldoende bewijs.
+
+- Elk voorstel bevat de **reden** en links naar beide profielen.
+- Samenvoegen gebeurt **uitsluitend na expliciete bevestiging**. Afwijzingen worden opgeslagen en blijven na herimport bestaan.
+- Reeds gekoppelde accounts worden niet opnieuw voorgesteld; twee verschillende LinkedIn-profielen of Facebook-identiteiten worden niet als veilige automatische samenvoeging aangeboden.
+- Namen alleen bewijzen niets; ga bij twijfel niet samenvoegen. Een samenvoeging is nog niet met één klik omkeerbaar.
+- De vergelijking gebruikt alleen namen, gebruikersnamen, werkgever en netwerktags; geen privéberichtinhoud. Handmatige opmerkingen/tags/werkhistorie blijven bij samenvoegen behouden.
+- Regressietests in `tests/test_smart_matches.py`; **nog op de homelab-installatie te valideren**.
 
 ## Facebook-import (v0.10.0, nog te testen op homeserver)
 
