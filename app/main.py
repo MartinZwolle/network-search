@@ -1,4 +1,7 @@
 import csv
+import json
+import zipfile
+from datetime import datetime, timezone
 import hashlib
 import io
 import os
@@ -14,6 +17,7 @@ from app.search import query_expression, expanded_query
 from app.message_people import contact_lookup, author_profile
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
+from app.facebook import migrate as migrate_facebook, import_archive as import_facebook, find_messages as find_facebook_messages
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
@@ -74,6 +78,7 @@ with connect() as _db:
     migrate_person_ids(_db)
     migrate_context(_db)
     migrate_manual(_db)
+    migrate_facebook(_db)
     sync_person_ids(_db)
 
 
@@ -241,6 +246,55 @@ def manual_link(linkedin_contact: str = Form(...), instagram_username: str = For
     return RedirectResponse("/matches?linked=1", status_code=303)
 
 
+@app.post("/upload-facebook")
+async def upload_facebook(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(400, "Selecteer een Facebook ZIP-export")
+    content = await file.read(128 * 1024 * 1024 + 1)
+    try:
+        with connect() as db:
+            counts = import_facebook(db, content)
+    except (ValueError, UnicodeDecodeError, OSError, zipfile.BadZipFile,
+            json.JSONDecodeError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse(
+        "/?fb_imported=" + str(counts["messages"]), status_code=303)
+
+
+@app.get("/facebook/thread/{thread_id}", response_class=HTMLResponse)
+def facebook_thread(thread_id: str):
+    with connect() as db:
+        thread = db.execute("SELECT * FROM facebook_threads WHERE id=?", (thread_id,)).fetchone()
+        if thread is None:
+            raise HTTPException(404, "Facebook-gesprek niet gevonden")
+        rows = db.execute(
+            """SELECT * FROM facebook_messages WHERE thread_id=?
+               ORDER BY timestamp_ms, message_key LIMIT 5000""", (thread_id,)
+        ).fetchall()
+        page = (f'<!doctype html><html lang="nl"><meta charset="utf-8">'
+                f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+                f'<title>Facebook-gesprek · Farley File</title>'
+                f'<style>body{{font:16px/1.7 system-ui,sans-serif;max-width:930px;'
+                f'margin:0 auto;padding:32px 20px;background:#f5f7f6;color:#252b30}}'
+                f'a{{color:#087f80}}article{{background:white;padding:18px;'
+                f'border:1px solid #dde6e5;margin:12px 0}}'
+                f'pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}</style>'
+                f'<p><a href="/">← Farley File</a></p>'
+                f'<h1>{escape(thread["title"])}</h1>'
+                f'<p>Facebook · {"Groepsgesprek" if thread["is_group"] else "Gesprek"}'
+                f' · {len(rows)} berichten getoond</p>')
+        for row in rows:
+            pid = account_person(db, "facebook", row["sender_key"]) if row["sender_key"] else None
+            author = escape(row["sender_name"])
+            if pid is not None:
+                author = f'<a href="/person/{pid}">{author}</a>'
+            when = (datetime.fromtimestamp(row["timestamp_ms"]/1000,timezone.utc)
+                    .strftime("%Y-%m-%d %H:%M")) if row["timestamp_ms"] else ""
+            page += (f'<article><strong>{author}</strong> <small>{when}</small>'
+                     f'<pre>{escape(row["content"])}</pre></article>')
+        return page + footer() + "</html>"
+
+
 @app.post("/person/new")
 def new_person(name: str = Form(...), confirmed: str = Form("")):
     name = " ".join(name.split())
@@ -376,7 +430,7 @@ def attach_existing_social(person_id: int, platform: str = Form(...),
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(q: str = "", imported: int = 0, ig_imported: int = -1):
+def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: int = -1):
     with connect() as db:
         total_contacts = db.execute("SELECT count(*) FROM contacts").fetchone()[0]
         total_messages = db.execute("SELECT count(*) FROM messages").fetchone()[0]
