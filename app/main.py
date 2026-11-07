@@ -857,7 +857,7 @@ def facebook_match(facebook_key: str = Form(...), target_person_id: int = Form(.
 
 
 @app.get("/matches", response_class=HTMLResponse)
-def possible_matches(page: int = 1, linked: int = 0):
+def possible_matches(page: int = 1, fb_page: int = 1, linked: int = 0):
     with connect() as db:
         suggestions = all_candidates(db)
         facebook_suggestions = facebook_candidates(db)
@@ -958,7 +958,7 @@ def possible_matches(page: int = 1, linked: int = 0):
     fb_total = len(facebook_suggestions)
     fb_size = 30
     fb_pages = max(1, (fb_total + fb_size - 1) // fb_size)
-    fb_page = min(page, fb_pages)
+    fb_page = min(max(1, fb_page), fb_pages)
     fb_visible = facebook_suggestions[(fb_page-1)*fb_size:fb_page*fb_size]
     html += (f'<section id="facebook"><h2>Facebook ↔ bestaande personen ({fb_total})</h2>'
              '<p class="muted">Voorstellen op basis van exact dezelfde naam. '
@@ -990,6 +990,10 @@ def possible_matches(page: int = 1, linked: int = 0):
                  '<input type="hidden" name="action" value="reject">'
                  '<button type="submit" style="background:#69767a">Niet dezelfde persoon</button>'
                  '</form></article>')
-    html += (f'<p>Facebook-voorstellen: pagina {fb_page} van {fb_pages}. '
-             'Gebruik de paginering bovenaan om meer voorstellen te bekijken.</p></section>')
+    html += f'<p>Facebook-voorstellen: pagina {fb_page} van {fb_pages}. '
+    if fb_page > 1:
+        html += f'<a href="/matches?page={page}&fb_page={fb_page-1}#facebook">← Vorige</a> · '
+    if fb_page < fb_pages:
+        html += f'<a href="/matches?page={page}&fb_page={fb_page+1}#facebook">Volgende →</a>'
+    html += '</p></section>'
     return html + footer() + '</html>'
