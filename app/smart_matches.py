@@ -133,7 +133,7 @@ def _evidence(a,b):
     employers=a["employers"] & b["employers"]
     if employers and (score>=35 or name_and_handle):
         reasons.append("Werkgever komt overeen: " + sorted(employers)[0][:80])
-        score+=15
+        score+=20
     tags=a["tags"] & b["tags"]
     if tags and score>=35:
         reasons.append("Gedeeld netwerk: #" + sorted(tags)[0][:50])
