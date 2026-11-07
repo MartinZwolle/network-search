@@ -887,7 +887,7 @@ def smart_match(person_a: int = Form(...), person_b: int = Form(...),
 
 
 @app.get("/matches", response_class=HTMLResponse)
-def possible_matches(page: int = 1, fb_page: int = 1, linked: int = 0):
+def possible_matches(page: int = 1, smart_page: int = 1, linked: int = 0):
     with connect() as db:
         suggestions = all_candidates(db)
         smart_suggestions = smart_candidates(db)
@@ -988,7 +988,7 @@ def possible_matches(page: int = 1, fb_page: int = 1, linked: int = 0):
     smart_total = len(smart_suggestions)
     smart_size = 30
     smart_pages = max(1, (smart_total + smart_size - 1) // smart_size)
-    smart_page = min(max(1, fb_page), smart_pages)
+    smart_page = min(max(1, smart_page), smart_pages)
     smart_visible = smart_suggestions[(smart_page-1)*smart_size:smart_page*smart_size]
     html += (f'<section id="smart"><h2>Slimme koppelvoorstellen ({smart_total})</h2>'
              '<p class="muted">LinkedIn, Facebook, Instagram en handmatige profielen. '
@@ -1024,8 +1024,8 @@ def possible_matches(page: int = 1, fb_page: int = 1, linked: int = 0):
                  '</form></article>')
     html += f'<p>Voorstellen: pagina {smart_page} van {smart_pages}. '
     if smart_page > 1:
-        html += f'<a href="/matches?page={page}&fb_page={smart_page-1}#smart">← Vorige</a> · '
+        html += f'<a href="/matches?page={page}&smart_page={smart_page-1}#smart">← Vorige</a> · '
     if smart_page < smart_pages:
-        html += f'<a href="/matches?page={page}&fb_page={smart_page+1}#smart">Volgende →</a>'
+        html += f'<a href="/matches?page={page}&smart_page={smart_page+1}#smart">Volgende →</a>'
     html += '</p></section>'
     return html + footer() + '</html>'
