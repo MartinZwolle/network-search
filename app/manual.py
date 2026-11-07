@@ -89,6 +89,12 @@ def display_name(db, person_id):
             if contact:
                 return " ".join(filter(None, (contact["first_name"], contact["last_name"])))
     for account in info[1]:
+        if account["platform"] == "facebook":
+            fb = db.execute("SELECT display_name FROM facebook_people WHERE fb_key=?",
+                            (account["account_key"],)).fetchone()
+            if fb:
+                return fb["display_name"]
+    for account in info[1]:
         if account["platform"] == "instagram":
             return "@" + account["account_key"]
     return "Persoon " + str(info[0])
