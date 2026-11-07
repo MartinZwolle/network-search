@@ -25,13 +25,14 @@ from app.manual import migrate as migrate_manual, create_person, rename_person, 
 from app.person_ids import merge_people
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact, migrate_facebook_matches, facebook_candidates, reject_facebook_match
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
+from app.smart_matches import migrate as migrate_smart_matches, candidates as smart_candidates, reject as reject_smart_match
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.10.1"
+APP_VERSION = "0.11.0"
 
 
 def footer():
@@ -80,6 +81,7 @@ with connect() as _db:
     migrate_manual(_db)
     migrate_facebook(_db)
     migrate_facebook_matches(_db)
+    migrate_smart_matches(_db)
     sync_person_ids(_db)
 
 
@@ -856,11 +858,39 @@ def facebook_match(facebook_key: str = Form(...), target_person_id: int = Form(.
     return RedirectResponse("/matches?linked=1", status_code=303)
 
 
+@app.post("/smart-match")
+def smart_match(person_a: int = Form(...), person_b: int = Form(...),
+                action: str = Form(...), confirmed: str = Form("")):
+    if action not in ("link", "reject"):
+        raise HTTPException(400, "Ongeldige actie")
+    with connect() as db:
+        first = person_details(db, person_a)
+        second = person_details(db, person_b)
+        if first is None or second is None or first[0] == second[0]:
+            raise HTTPException(400, "Selecteer twee verschillende bestaande personen")
+        if action == "reject":
+            reject_smart_match(db, first[0], second[0])
+        else:
+            if confirmed != "yes":
+                raise HTTPException(400, "Bevestig eerst de samenvoeging")
+            # Validate that the proposal is still current (also excludes
+            # conflicting LinkedIn and Facebook accounts).
+            valid = any({c["source_id"],c["target_id"]} == {first[0],second[0]}
+                        for c in smart_candidates(db))
+            if not valid:
+                raise HTTPException(400, "Deze koppeling is niet meer voorgesteld; vernieuw de pagina")
+            try:
+                merge_people(db, person_b, person_a)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+    return RedirectResponse("/matches?linked=1#smart",status_code=303)
+
+
 @app.get("/matches", response_class=HTMLResponse)
 def possible_matches(page: int = 1, fb_page: int = 1, linked: int = 0):
     with connect() as db:
         suggestions = all_candidates(db)
-        facebook_suggestions = facebook_candidates(db)
+        smart_suggestions = smart_candidates(db)
         linked_count = db.execute("SELECT COUNT(*) FROM profile_links").fetchone()[0]
         rejected_rows = db.execute("""SELECT r.linkedin_url, r.instagram_username,
             c.first_name, c.last_name FROM profile_rejections r
@@ -955,45 +985,47 @@ def possible_matches(page: int = 1, fb_page: int = 1, linked: int = 0):
                  f'<input type="hidden" name="source" value="matches">'
                  f'<button type="submit">Afwijzing ongedaan maken</button></form></article>')
     html += '</section></details>'
-    fb_total = len(facebook_suggestions)
-    fb_size = 30
-    fb_pages = max(1, (fb_total + fb_size - 1) // fb_size)
-    fb_page = min(max(1, fb_page), fb_pages)
-    fb_visible = facebook_suggestions[(fb_page-1)*fb_size:fb_page*fb_size]
-    html += (f'<section id="facebook"><h2>Facebook ↔ bestaande personen ({fb_total})</h2>'
-             '<p class="muted">Voorstellen op basis van exact dezelfde naam. '
-             'Een naam alleen bewijst niet dat het dezelfde persoon is. '
-             'Controleer beide profielen; er wordt nooit automatisch gekoppeld.</p>')
-    if not fb_visible:
-        html += '<p>Geen nieuwe Facebook-voorstellen op deze pagina.</p>'
-    for item in fb_visible:
-        fb_name = escape(item["facebook_name"])
-        target_name = escape(item["target_name"])
-        fb_pid = item["facebook_person_id"]
-        target_pid = item["target_person_id"]
-        key = escape(item["facebook_key"], quote=True)
-        html += (f'<article><strong>{fb_name}</strong> (Facebook)'
-                 f' ↔ <strong>{target_name}</strong> ({escape(item["platforms"])})<br>'
-                 f'<a href="/person/{fb_pid}">Facebook-profiel bekijken</a> · '
-                 f'<a href="/person/{target_pid}">Bestaand profiel bekijken</a>'
-                 f'<form method="post" action="/facebook-match" '
+    smart_total = len(smart_suggestions)
+    smart_size = 30
+    smart_pages = max(1, (smart_total + smart_size - 1) // smart_size)
+    smart_page = min(max(1, fb_page), smart_pages)
+    smart_visible = smart_suggestions[(smart_page-1)*smart_size:smart_page*smart_size]
+    html += (f'<section id="smart"><h2>Slimme koppelvoorstellen ({smart_total})</h2>'
+             '<p class="muted">LinkedIn, Facebook, Instagram en handmatige profielen. '
+             'Je ziet waarom twee personen mogelijk dezelfde zijn. '
+             '<strong>Dit zijn aanwijzingen, geen identiteitsbewijs.</strong> '
+             'Er wordt nooit automatisch samengevoegd. '
+             'De gegevens van beide profielen blijven bij een bevestigde koppeling behouden.</p>')
+    if not smart_visible:
+        html += '<p>Geen nieuwe voorstellen op deze pagina.</p>'
+    for item in smart_visible:
+        source_id, target_id = item["source_id"], item["target_id"]
+        evidence = "; ".join(item["reasons"])
+        html += (f'<article><strong>{escape(item["source_name"])}</strong> '
+                 f'({escape(item["source_platforms"])}) ↔ '
+                 f'<strong>{escape(item["target_name"])}</strong> '
+                 f'({escape(item["target_platforms"])})<br>'
+                 f'<small>Waarom: {escape(evidence)}</small><br>'
+                 f'<a href="/person/{source_id}">Profiel 1 bekijken</a> · '
+                 f'<a href="/person/{target_id}">Profiel 2 bekijken</a>'
+                 f'<form method="post" action="/smart-match" '
                  'onsubmit="return confirm(\'Weet je zeker dat dit dezelfde persoon is? '
-                 'De profielen en hun gegevens worden samengevoegd.\')">'
-                 f'<input type="hidden" name="facebook_key" value="{key}">'
-                 f'<input type="hidden" name="target_person_id" value="{target_pid}">'
+                 'Samenvoegen kan niet automatisch ongedaan worden gemaakt.\')">'
+                 f'<input type="hidden" name="person_a" value="{source_id}">'
+                 f'<input type="hidden" name="person_b" value="{target_id}">'
                  '<input type="hidden" name="action" value="link">'
                  '<input type="hidden" name="confirmed" value="yes">'
-                 '<button type="submit">Zelfde persoon — koppelen</button></form>'
-                 '<form method="post" action="/facebook-match">'
-                 f'<input type="hidden" name="facebook_key" value="{key}">'
-                 f'<input type="hidden" name="target_person_id" value="{target_pid}">'
+                 '<button type="submit">Zelfde persoon — samenvoegen</button></form>'
+                 '<form method="post" action="/smart-match">'
+                 f'<input type="hidden" name="person_a" value="{source_id}">'
+                 f'<input type="hidden" name="person_b" value="{target_id}">'
                  '<input type="hidden" name="action" value="reject">'
                  '<button type="submit" style="background:#69767a">Niet dezelfde persoon</button>'
                  '</form></article>')
-    html += f'<p>Facebook-voorstellen: pagina {fb_page} van {fb_pages}. '
-    if fb_page > 1:
-        html += f'<a href="/matches?page={page}&fb_page={fb_page-1}#facebook">← Vorige</a> · '
-    if fb_page < fb_pages:
-        html += f'<a href="/matches?page={page}&fb_page={fb_page+1}#facebook">Volgende →</a>'
+    html += f'<p>Voorstellen: pagina {smart_page} van {smart_pages}. '
+    if smart_page > 1:
+        html += f'<a href="/matches?page={page}&fb_page={smart_page-1}#smart">← Vorige</a> · '
+    if smart_page < smart_pages:
+        html += f'<a href="/matches?page={page}&fb_page={smart_page+1}#smart">Volgende →</a>'
     html += '</p></section>'
     return html + footer() + '</html>'
