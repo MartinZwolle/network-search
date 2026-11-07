@@ -525,9 +525,10 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
 </style><header><span class="brand">Elegant Chaos / Labs</span><div class="app-heading"><img class="app-logo" src="/static/farley-logo.svg" alt="" width="82" height="82"><h1>Farley File</h1></div><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
-    <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten</p>
+    <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten<br>Facebook: {fb_people_total} personen · {fb_message_total} berichten</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
+    {("<p>Facebook: " + str(fb_imported) + " nieuwe berichten verwerkt.</p>") if fb_imported >= 0 else ""}
     <details class="add-person"><summary><span class="plus-icon" aria-hidden="true">+</span> Persoon toevoegen</summary>
     <p class="muted">Ook zonder LinkedIn, Instagram of Facebook. Later kun je accounts toevoegen.</p>
     <form method="post" action="/person/new">
@@ -617,6 +618,16 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'<small>{escape(msg["date"][:10])}</small>'
                      f'<pre>{escape(msg["content"][:700])}</pre></article>')
         page += "</section>"
+        page += f'<section><h2>Facebook-berichten ({len(fb_message_results)} getoond)</h2>'
+        for fb_msg in fb_message_results:
+            pid = account_person(db, "facebook", fb_msg["sender_key"]) if fb_msg["sender_key"] else None
+            sender = escape(fb_msg["sender_name"])
+            if pid is not None:
+                sender = f'<a href="/person/{pid}">{sender}</a>'
+            page += (f'<article><strong>{sender}</strong> <small>· Facebook</small><br>'
+                     f'<a href="/facebook/thread/{fb_msg["thread_id"]}">Volledig gesprek bekijken</a>'
+                     f'<pre>{escape(fb_msg["content"][:700])}</pre></article>')
+        page += "</section>"
     page += """<details style="margin-top:32px;background:#fff;border:1px solid #dde6e5;
         padding:18px 24px;border-radius:5px">
         <summary style="cursor:pointer;color:#087f80;font-weight:700">CSV importeren</summary>
@@ -631,7 +642,14 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
         Verzoeken, gesynchroniseerde telefooncontacten, broadcasts en media worden overgeslagen.</p>
         <form action="/upload-instagram" method="post" enctype="multipart/form-data">
         <input type="file" name="file" accept=".zip" required>
-        <button>Importeer Instagram</button></form></details>"""
+        <button>Importeer Instagram</button></form>
+        <hr style="border:0;border-top:1px solid #dde6e5;margin:24px 0">
+        <p><strong>Facebook-export (ZIP, maximaal 128 MB)</strong></p>
+        <p>Alleen contacten en tekstberichten. Media worden overgeslagen.
+        Facebook-personen worden niet automatisch gekoppeld op basis van naam.</p>
+        <form action="/upload-facebook" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".zip" required>
+        <button>Importeer Facebook</button></form></details>"""
     return page + footer() + "</html>"
 
 
