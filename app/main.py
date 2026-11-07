@@ -11,6 +11,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from app.search import query_expression, expanded_query
+from app.message_people import contact_lookup, author_profile
 from app.activity import contact_timeline, network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
 from app.people import profile as render_profile, profile_url, merged_contacts
@@ -520,10 +521,15 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
                      f'{" · " + escape(count) if count else ""}</article>')
         page += '</section>'
         page += f"<section><h2>Berichten ({len(messages)} getoond)</h2>"
+        sender_lookup = contact_lookup(db) if messages else {}
         for message in messages:
+            sender_name = escape(message["sender"] or "Onbekende afzender")
+            sender_id = author_profile(message, sender_lookup)
+            sender_html = (f'<a href="/person/{sender_id}">{sender_name}</a>'
+                           if sender_id is not None else sender_name)
             page += (f'<article><strong>{escape(message["subject"] or "(geen onderwerp)")}'
                      f'</strong><br><small>{escape(message["date"] or "")} · '
-                     f'{escape(message["sender"] or "")}</small>'
+                     f'{sender_html}</small>'
                      f'<pre>{escape((message["content"] or "")[:700])}</pre></article>')
         page += "</section>"
         page += f'<section><h2>Instagram-berichten ({len(ig_message_results)} getoond)</h2>'
