@@ -22,6 +22,7 @@ from app.facebook import migrate as migrate_facebook, import_archive as import_f
 from app.twitter import migrate as migrate_twitter, import_archive as import_twitter
 from app.twitter_view import page as twitter_archive_page
 from app.twitter_explore import page as twitter_explore_page
+from app.twitter_dms import conversations as twitter_dm_conversations, thread as twitter_dm_thread
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
@@ -36,7 +37,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.12.3"
+APP_VERSION = "0.12.4"
 
 
 def footer():
@@ -267,6 +268,21 @@ async def upload_facebook(file: UploadFile = File(...)):
         raise HTTPException(400, str(exc)) from exc
     return RedirectResponse(
         "/?fb_imported=" + str(counts["messages"]), status_code=303)
+
+
+@app.get("/twitter/dms",response_class=HTMLResponse)
+def twitter_dms_list(page_number: int = 1):
+    with connect() as db:
+        return twitter_dm_conversations(db,page_number)
+
+
+@app.get("/twitter/dms/thread",response_class=HTMLResponse)
+def twitter_dms_thread(conversation_id: str, page_number: int = 1):
+    with connect() as db:
+        html=twitter_dm_thread(db,conversation_id,page_number)
+        if html is None:
+            raise HTTPException(404,"Twitter-DM-gesprek niet gevonden")
+        return html
 
 
 @app.get("/twitter/explore",response_class=HTMLResponse)
