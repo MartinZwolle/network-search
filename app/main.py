@@ -437,10 +437,12 @@ def remove_person_job(person_id: int, job_id: int = Form(...)):
 def attach_existing_social(person_id: int, platform: str = Form(...),
                            account: str = Form(...)):
     key = account.strip()
-    if platform not in ("linkedin", "instagram", "facebook"):
+    if platform not in ("linkedin", "instagram", "facebook", "twitter"):
         raise HTTPException(400, "Onbekend sociaal platform")
     if platform == "instagram":
         key = key.lstrip("@").casefold()
+    if platform == "twitter" and (not key.isdigit() or len(key)>25):
+        raise HTTPException(400, "Gebruik het numerieke Twitter-account-ID uit het archief")
     if platform == "facebook":
         key = "name:" + " ".join(key.casefold().split()).removeprefix("name:")
     with connect() as db:
@@ -449,7 +451,7 @@ def attach_existing_social(person_id: int, platform: str = Form(...),
             raise HTTPException(404, "Persoon niet gevonden")
         source_id = account_person(db, platform, key)
         if source_id is None:
-            raise HTTPException(400, "Account nog niet geïmporteerd. Gebruik de exacte profiel-URL, gebruikersnaam of Facebook-naam.")
+            raise HTTPException(400, "Account nog niet geïmporteerd. Gebruik de exacte profiel-URL, gebruikersnaam, Facebook-naam of het Twitter-account-ID.")
         try:
             merge_people(db, destination[0], source_id)
         except ValueError as exc:
