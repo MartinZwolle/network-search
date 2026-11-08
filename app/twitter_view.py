@@ -23,7 +23,8 @@ def page(db,q="",kind="all",person_id=None):
           'color:white;border:0;cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}'
           'small{color:#647078}</style><p><a href="/">← Farley File</a> · '
           '<a href="/activity">Netwerkactiviteit</a> · '
-          '<a href="/twitter/explore"><strong>Bladeren zonder zoekterm →</strong></a></p>'
+          '<a href="/twitter/explore"><strong>Bladeren zonder zoekterm →</strong></a> · '
+          '<a href="/twitter/dms"><strong>Alle DM-gesprekken →</strong></a></p>'
           '<h1>Twitter-archief</h1>'
           '<p>Historische gebruikersnamen zijn aanwijzingen; accounts kunnen later '
           'zijn hernoemd of verwijderd. Geen live Twitter-gegevens.</p>')
@@ -39,6 +40,7 @@ def page(db,q="",kind="all",person_id=None):
         return (html+f'<section><h2>{stats["a"]} account-ID’s · '
                 f'{stats["t"]} tweets · {stats["d"]} privéberichten</h2>'
                 '<p><a href="/twitter/explore">Ontdek per jaar wie je sprak en blader door tweets en DM’s →</a></p>'
+                '<p><a href="/twitter/dms">Bekijk alle DM-gesprekken, ook zonder bekende gebruikersnaam →</a></p>'
                 '<p>Of zoek naar een persoon, gebruikersnaam of onderwerp.</p></section></html>')
     ids=[]
     if person_id is not None:
