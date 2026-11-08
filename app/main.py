@@ -19,6 +19,7 @@ from app.activity import contact_timeline
 from app.activity_all import render as render_network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
 from app.facebook import migrate as migrate_facebook, import_archive as import_facebook, find_messages as find_facebook_messages
+from app.twitter import migrate as migrate_twitter, import_archive as import_twitter
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
@@ -33,7 +34,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.11.1"
+APP_VERSION = "0.12.0"
 
 
 def footer():
@@ -81,6 +82,7 @@ with connect() as _db:
     migrate_context(_db)
     migrate_manual(_db)
     migrate_facebook(_db)
+    migrate_twitter(_db)
     migrate_facebook_matches(_db)
     migrate_smart_matches(_db)
     sync_person_ids(_db)
@@ -265,6 +267,19 @@ async def upload_facebook(file: UploadFile = File(...)):
         "/?fb_imported=" + str(counts["messages"]), status_code=303)
 
 
+@app.post("/upload-twitter")
+async def upload_twitter(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(400,"Selecteer een officiële Twitter ZIP-export")
+    content=await file.read(100*1024*1024+1)
+    try:
+        with connect() as db:
+            counts=import_twitter(db,content)
+    except (ValueError,UnicodeDecodeError,OSError,json.JSONDecodeError,zipfile.BadZipFile) as exc:
+        raise HTTPException(400,str(exc)) from exc
+    return RedirectResponse("/?twitter_imported="+str(counts["tweets"]),status_code=303)
+
+
 @app.get("/facebook/thread/{thread_id}", response_class=HTMLResponse)
 def facebook_thread(thread_id: str):
     with connect() as db:
@@ -436,7 +451,7 @@ def attach_existing_social(person_id: int, platform: str = Form(...),
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: int = -1):
+def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: int = -1, twitter_imported: int = -1):
     with connect() as db:
         total_contacts = db.execute("SELECT count(*) FROM contacts").fetchone()[0]
         total_messages = db.execute("SELECT count(*) FROM messages").fetchone()[0]
@@ -448,6 +463,9 @@ def index(q: str = "", imported: int = 0, ig_imported: int = -1, fb_imported: in
         fb_message_results = []
         fb_people_total = db.execute("SELECT count(*) FROM facebook_people").fetchone()[0]
         fb_message_total = db.execute("SELECT count(*) FROM facebook_messages").fetchone()[0]
+        twitter_accounts = db.execute("SELECT COUNT(*) FROM twitter_accounts").fetchone()[0]
+        twitter_tweets = db.execute("SELECT COUNT(*) FROM twitter_tweets").fetchone()[0]
+        twitter_dms = db.execute("SELECT COUNT(*) FROM twitter_dms").fetchone()[0]
         if q.strip():
             # Instagram usernames and message text are separate from LinkedIn identities.
             like = "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -535,10 +553,11 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
 </style><header><span class="brand">Elegant Chaos / Labs</span><div class="app-heading"><img class="app-logo" src="/static/farley-logo.svg" alt="" width="82" height="82"><h1>Farley File</h1></div><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
-    <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten<br>Facebook: {fb_people_total} personen · {fb_message_total} berichten</p>
+    <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten<br>Facebook: {fb_people_total} personen · {fb_message_total} berichten<br>Twitter: {twitter_accounts} historische accounts · {twitter_tweets} tweets · {twitter_dms} DM’s</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
     {("<p>Facebook: " + str(fb_imported) + " nieuwe berichten verwerkt.</p>") if fb_imported >= 0 else ""}
+    {("<p>Twitter: " + str(twitter_imported) + " tweets uit archief verwerkt.</p>") if twitter_imported >= 0 else ""}
     <details class="add-person"><summary><span class="plus-icon" aria-hidden="true">+</span> Persoon toevoegen</summary>
     <p class="muted">Ook zonder LinkedIn, Instagram of Facebook. Later kun je accounts toevoegen.</p>
     <form method="post" action="/person/new">
@@ -659,7 +678,15 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
         Facebook-personen worden niet automatisch gekoppeld op basis van naam.</p>
         <form action="/upload-facebook" method="post" enctype="multipart/form-data">
         <input type="file" name="file" accept=".zip" required>
-        <button>Importeer Facebook</button></form></details>"""
+        <button>Importeer Facebook</button></form>
+        <hr style="border:0;border-top:1px solid #dde6e5;margin:24px 0">
+        <p><strong>Twitter-archief (ZIP, maximaal 100 MB)</strong></p>
+        <p>Importeert tweets, replies, vermeldingen, DM’s en historische account-ID’s. 
+        Bewaart oude gebruikersnamen als waarnemingen; koppelt nooit vanzelf aan een ander platform.
+        Bevat privéberichten: bewaar de ZIP veilig.</p>
+        <form action="/upload-twitter" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".zip" required>
+        <button>Importeer Twitter</button></form></details>"""
     return page + footer() + "</html>"
 
 
