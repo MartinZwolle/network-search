@@ -22,7 +22,9 @@ def page(db,q="",kind="all",person_id=None):
           'input{padding:10px;max-width:85%;width:450px}button{padding:10px;background:#087f80;'
           'color:white;border:0;cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}'
           'small{color:#647078}</style><p><a href="/">← Farley File</a> · '
-          '<a href="/activity">Netwerkactiviteit</a></p><h1>Twitter-archief</h1>'
+          '<a href="/activity">Netwerkactiviteit</a> · '
+          '<a href="/twitter/explore"><strong>Bladeren zonder zoekterm →</strong></a></p>'
+          '<h1>Twitter-archief</h1>'
           '<p>Historische gebruikersnamen zijn aanwijzingen; accounts kunnen later '
           'zijn hernoemd of verwijderd. Geen live Twitter-gegevens.</p>')
     if person_id is None:
@@ -36,7 +38,8 @@ def page(db,q="",kind="all",person_id=None):
           (SELECT count(*) FROM twitter_dms) d""").fetchone()
         return (html+f'<section><h2>{stats["a"]} account-ID’s · '
                 f'{stats["t"]} tweets · {stats["d"]} privéberichten</h2>'
-                '<p>Zoek naar een persoon, gebruikersnaam of onderwerp.</p></section></html>')
+                '<p><a href="/twitter/explore">Ontdek per jaar wie je sprak en blader door tweets en DM’s →</a></p>'
+                '<p>Of zoek naar een persoon, gebruikersnaam of onderwerp.</p></section></html>')
     ids=[]
     if person_id is not None:
         ids=[r["account_key"] for r in db.execute(
