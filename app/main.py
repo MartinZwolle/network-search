@@ -35,7 +35,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.12.1"
+APP_VERSION = "0.12.2"
 
 
 def footer():
