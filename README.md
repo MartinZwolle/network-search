@@ -4,7 +4,21 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.11.1** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.12.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Historische Twitter-import (v0.12.0)
+
+Farley File accepteert de **originele Twitter ZIP-export** van maximaal 100 MB. De importer leest uitsluitend `account.js`, `tweets.js`, `following.js`, `follower.js` en `direct-messages.js` uit de `data/` map. Media, advertenties, telefooncontacten en overige exportbestanden worden genegeerd.
+
+- Numerieke Twitter-account-ID's blijven leidend; gebruikersnamen worden als **historisch waargenomen aliassen** bewaard, ook als een account inmiddels verdwenen of hernoemd is.
+- Tweets, replies, vermeldingen en privéberichten worden met originele tijdstippen opgeslagen en kunnen worden doorzocht via **Twitter-archief**.
+- De activiteitspagina toont Twitter-tweets en Twitter-DM's afzonderlijk per jaar.
+- Nieuwe Twitter-identiteiten worden **niet automatisch aan LinkedIn, Instagram of Facebook gekoppeld**. Via het persoonsdossier kan de gebruiker zelf op account-ID koppelen.
+- Import is bedoeld om herhaalbaar te zijn: vaste tweet- en DM-ID's voorkomen duplicaten.
+- Verwijderde Twitter-accounts blijven als historische account-ID bewaard, ook zonder bekende gebruikersnaam.
+- Bij tweets bevat de export vooral **je eigen kant van het publieke gesprek**; suggereer geen volledige gesprekken met anderen. Bij DM's bevat de export wel beide kanten voor zover aanwezig.
+- **Privacy:** houd de originele ZIP en de SQLite-database lokaal en beveiligd. De applicatie biedt nog geen aparte toegangsrechten per bericht.
+- De implementatie bevat unit tests in `tests/test_twitter.py`. **Nog niet op de homelab-installatie uitgevoerd.**
 
 ## Netwerkactiviteit over alle platforms (v0.11.1)
 
