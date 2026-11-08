@@ -21,6 +21,7 @@ from app.instagram import migrate as migrate_instagram, import_archive
 from app.facebook import migrate as migrate_facebook, import_archive as import_facebook, find_messages as find_facebook_messages
 from app.twitter import migrate as migrate_twitter, import_archive as import_twitter
 from app.twitter_view import page as twitter_archive_page
+from app.twitter_explore import page as twitter_explore_page
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
@@ -35,7 +36,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.12.2"
+APP_VERSION = "0.12.3"
 
 
 def footer():
@@ -266,6 +267,12 @@ async def upload_facebook(file: UploadFile = File(...)):
         raise HTTPException(400, str(exc)) from exc
     return RedirectResponse(
         "/?fb_imported=" + str(counts["messages"]), status_code=303)
+
+
+@app.get("/twitter/explore",response_class=HTMLResponse)
+def explore_twitter(year: int = 0, kind: str = "tweets", page_number: int = 1):
+    with connect() as db:
+        return twitter_explore_page(db,year,kind,page_number)
 
 
 @app.get("/twitter",response_class=HTMLResponse)
