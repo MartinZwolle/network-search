@@ -92,23 +92,40 @@ def gather(db):
             _mark(entries,pid,"Facebook",date,row["message_key"],
                   bool(row["is_group"]))
 
+    own={r["user_id"] for r in db.execute("SELECT user_id FROM twitter_accounts WHERE is_self=1")}
+    for row in db.execute("SELECT created_at FROM twitter_tweets"):
+        date=parse_date(row["created_at"])
+        if date:
+            annual[date.year]["Twitter tweets"]+=1
+        else:
+            unknown["Twitter tweets"]+=1
+    for row in db.execute("SELECT dm_id,sender_id,recipient_id,created_at FROM twitter_dms"):
+        date=parse_date(row["created_at"])
+        if date:
+            annual[date.year]["Twitter DM"]+=1
+        else:
+            unknown["Twitter DM"]+=1
+        other=(row["recipient_id"] if row["sender_id"] in own
+               else row["sender_id"] if row["recipient_id"] in own else "")
+        if other:
+            _mark(entries,account_person(db,"twitter",other),"Twitter DM",date,row["dm_id"])
     return annual,entries,unknown
 
 
 def render(db, source="all"):
-    choices=("all","linkedin","instagram","facebook")
+    choices=("all","linkedin","instagram","facebook","twitter")
     if source not in choices:
         source="all"
     annual,entries,unknown=gather(db)
-    keys={"linkedin":"LinkedIn","instagram":"Instagram","facebook":"Facebook"}
-    active_sources=([keys[source]] if source!="all" else list(keys.values()))
+    keys={"linkedin":"LinkedIn","instagram":"Instagram","facebook":"Facebook","twitter":"Twitter tweets"}
+    active_sources=(["Twitter tweets","Twitter DM"] if source=="twitter" else [keys[source]] if source!="all" else ["LinkedIn","Instagram","Facebook","Twitter tweets","Twitter DM"])
     years=sorted(annual)
     yearly=[(str(year),sum(annual[year][p] for p in active_sources))
             for year in years if sum(annual[year][p] for p in active_sources)]
-    totals={p:sum(annual[y][p] for y in years)+unknown[p] for p in keys.values()}
+    totals={p:sum(annual[y][p] for y in years)+unknown[p] for p in ["LinkedIn","Instagram","Facebook","Twitter tweets","Twitter DM"]}
     all_total=sum(totals.values())
     unrecognized=sum(unknown[p] for p in active_sources)
-    title="Alle platforms" if source=="all" else keys[source]
+    title="Alle platforms" if source=="all" else ("Twitter" if source=="twitter" else keys[source])
 
     html=('<section><h2>Netwerkactiviteit over alle platforms</h2>'
           '<p class="muted">Berichten uit je geïmporteerde archieven, geen live '
@@ -116,12 +133,12 @@ def render(db, source="all"):
           'Een groepsbericht telt één keer per platform, niet voor elke deelnemer.</p>'
           '<nav style="display:flex;gap:16px;flex-wrap:wrap">')
     for key,label in (("all","Alles"),("linkedin","LinkedIn"),
-                      ("instagram","Instagram"),("facebook","Facebook")):
+                      ("instagram","Instagram"),("facebook","Facebook"),("twitter","Twitter")):
         selected=' aria-current="page" style="font-weight:800"' if source==key else ""
         html+=f'<a href="/activity?source={key}"{selected}>{label}</a>'
     html+='</nav>'
     html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:20px">'
-    for p in keys.values():
+    for p in ["LinkedIn","Instagram","Facebook","Twitter tweets","Twitter DM"]:
         html+=(f'<div style="background:#eef5f4;border-radius:5px;padding:14px;min-width:170px">'
                f'<small>{p}</small><br><strong style="font-size:1.65rem">'
                f'{totals[p]:,}</strong><br><small>geïmporteerde tekstberichten</small></div>')
@@ -135,9 +152,9 @@ def render(db, source="all"):
     if source=="all" and years:
         html+='<details><summary style="cursor:pointer;color:#087f80">Jaren per platform vergelijken</summary>'
         html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
-        html+='<tr><th style="text-align:left">Jaar</th><th>LinkedIn</th><th>Instagram</th><th>Facebook</th><th>Totaal</th></tr>'
+        html+='<tr><th style="text-align:left">Jaar</th><th>LinkedIn</th><th>Instagram</th><th>Facebook</th><th>Twitter tweets</th><th>Twitter DM</th><th>Totaal</th></tr>'
         for year in reversed(years):
-            vals=[annual[year][p] for p in keys.values()]
+            vals=[annual[year][p] for p in ["LinkedIn","Instagram","Facebook","Twitter tweets","Twitter DM"]]
             html+=(f'<tr><td>{year}</td>'
                    +''.join(f'<td style="text-align:center">{v}</td>' for v in vals)
                    +f'<td style="text-align:center"><strong>{sum(vals)}</strong></td></tr>')
