@@ -130,7 +130,7 @@ def import_archive(db,content):
         if sum(archive.getinfo(name).file_size for name in present)>MAX_TOTAL:
             raise ValueError("Twitter JSON-bestanden samen te groot")
         data={name[5:]:_read(archive,name) for name in sorted(present)}
-    profile=data["account"][0].get("account",{}) if data["account"] else {}
+    profile=data["account.js"][0].get("account",{}) if data["account.js"] else {}
     self_id=_id(profile.get("accountId"))
     if not self_id:
         raise ValueError("Twitter-account-ID ontbreekt")
