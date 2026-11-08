@@ -146,7 +146,7 @@ def import_archive(db,content):
         # tweet identities and observed handles are never removed.
         db.execute(f"UPDATE twitter_accounts SET {flag}=0")
         for item in data[section]:
-            uid=_account(item.get(section[:-3],{}).get("accountId"))
+            uid=_account(db,item.get(section[:-3],{}).get("accountId"))
             if uid:
                 db.execute(f"UPDATE twitter_accounts SET {flag}=1 WHERE user_id=?",(uid,))
                 counts[section[:-3]+"s" if section=="follower.js" else "following"]+=1
