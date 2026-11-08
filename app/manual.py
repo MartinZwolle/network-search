@@ -97,6 +97,16 @@ def display_name(db, person_id):
     for account in info[1]:
         if account["platform"] == "instagram":
             return "@" + account["account_key"]
+    for account in info[1]:
+        if account["platform"] == "twitter":
+            handle = db.execute("""SELECT handle FROM twitter_handles
+                WHERE user_id=? ORDER BY
+                CASE source WHEN 'archive_account' THEN 0
+                            WHEN 'reply' THEN 1 ELSE 2 END,
+                last_seen DESC LIMIT 1""",(account["account_key"],)).fetchone()
+            if handle:
+                return "@"+handle["handle"]
+            return "Twitter-ID "+account["account_key"]
     return "Persoon " + str(info[0])
 
 
