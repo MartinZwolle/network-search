@@ -4,7 +4,13 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v0.12.0** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v0.12.4** — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+
+## Twitter-DM-gesprekken bekijken (v0.12.4)
+
+Via **Twitter-archief → Alle DM-gesprekken** kun je alle geïmporteerde privégesprekken doorbladeren, zonder een gebruikersnaam te hoeven weten. De lijst toont laatste bericht, aantal berichten, historische gesprekspartners en hun vaste Twitter-account-ID. Als een historische gebruikersnaam ontbreekt, blijft het gesprek zichtbaar onder het numerieke ID. Klik door voor chronologisch gepagineerde berichten, inclusief beide kanten voor zover aanwezig in de export.
+
+Dit is alleen een viewer: hij reconstrueert **geen ontbrekende** berichten van verwijderde accounts en maakt geen nieuwe identiteitskoppelingen. Privacy: de inhoud is gevoelig en gebruikt momenteel dezelfde toegangsbeveiliging als Farley File.
 
 ## Historische Twitter-import (v0.12.0)
 
