@@ -295,6 +295,21 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
         html += '</article>'
     html += '</section>'
     if person_id is not None:
+        twitter_ids = [a["account_key"] for a in person_details(db,person_id)[1]
+                       if a["platform"]=="twitter"]
+        if twitter_ids:
+            html += '<section><h2>Historische Twitter-identiteit</h2>'
+            for uid in twitter_ids:
+                rows=db.execute("SELECT DISTINCT handle FROM twitter_handles WHERE user_id=? ORDER BY handle",
+                                (uid,)).fetchall()
+                labels=", ".join("@"+r["handle"] for r in rows)
+                html+=(f'<article><strong>ID: {escape(uid)}</strong><br>'
+                       f'<small>Bekende historische gebruikersnamen: '
+                       f'{escape(labels or "onbekend")}</small><br>'
+                       f'<a href="/twitter?person_id={person_id}">Tweets en DM’s bekijken</a></article>')
+            html+='</section>'
+
+    if person_id is not None:
         html += (f'<section><h2>Obsidian · gespreksverslagen</h2>'
                  '<p class="muted">Schrijf je gespreksverslagen in Obsidian en verwijs '
                  'vanuit deze persoonspagina naar de notities. De inhoud wordt hier niet gekopieerd.</p>'
@@ -333,14 +348,14 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
 
     if person_id is not None:
         html += (f'<section><h2>Sociaal account toevoegen</h2>'
-                 '<p class="muted">Koppel een bestaand LinkedIn- of Instagram-account '
+                 '<p class="muted">Koppel een bestaand sociaal account '
                  'aan deze persoon, ook als je hem of haar handmatig hebt aangemaakt. '
                  'Dit is een bewuste samenvoeging van twee profielen.</p>'
                  f'<form method="post" action="/person/{person_id}/attach">'
                  '<label>Platform<br><select name="platform">'
                  '<option value="linkedin">LinkedIn</option>'
-                 '<option value="instagram">Instagram</option><option value="facebook">Facebook</option></select></label><br>'
-                 '<label>LinkedIn-URL, Instagram-gebruikersnaam of Facebook-naam<br>'
+                 '<option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="twitter">Twitter</option></select></label><br>'
+                 '<label>LinkedIn-URL, Instagram-gebruikersnaam, Facebook-naam of Twitter-account-ID<br>'
                  '<input type="text" name="account" required maxlength="600" '
                  'style="width:min(100%,480px);padding:10px"></label><br>'
                  '<button type="submit">Account koppelen</button></form></section>')
