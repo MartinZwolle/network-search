@@ -20,6 +20,7 @@ from app.activity_all import render as render_network_activity
 from app.instagram import migrate as migrate_instagram, import_archive
 from app.facebook import migrate as migrate_facebook, import_archive as import_facebook, find_messages as find_facebook_messages
 from app.twitter import migrate as migrate_twitter, import_archive as import_twitter
+from app.twitter_view import page as twitter_archive_page
 from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
@@ -265,6 +266,12 @@ async def upload_facebook(file: UploadFile = File(...)):
         raise HTTPException(400, str(exc)) from exc
     return RedirectResponse(
         "/?fb_imported=" + str(counts["messages"]), status_code=303)
+
+
+@app.get("/twitter",response_class=HTMLResponse)
+def twitter_archive(q: str = "",kind: str = "all",person_id: int = 0):
+    with connect() as db:
+        return twitter_archive_page(db,q,kind,person_id or None)
 
 
 @app.post("/upload-twitter")
@@ -552,7 +559,7 @@ article strong{{font-size:1.08rem}}small,.muted{{color:var(--muted)}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}
 .badge{{display:inline-block;padding:3px 10px;background:#e4f3f0;color:#075f5c;border-radius:3px;font-size:.85rem;font-weight:700}}
 @media(max-width:550px){{input[type=text]{{width:100%;margin-bottom:10px}}button{{width:100%}}}}
-</style><header><span class="brand">Elegant Chaos / Labs</span><div class="app-heading"><img class="app-logo" src="/static/farley-logo.svg" alt="" width="82" height="82"><h1>Farley File</h1></div><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
+</style><header><span class="brand">Elegant Chaos / Labs</span><div class="app-heading"><img class="app-logo" src="/static/farley-logo.svg" alt="" width="82" height="82"><h1>Farley File</h1></div><span class="muted">Je netwerk, opnieuw ontdekt.</span><nav style="margin-top:16px"><a href="/" aria-label="Naar de startpagina">⌂ Home</a> · <a href="/activity">Netwerkactiviteit</a> · <a href="/twitter">Twitter-archief</a> · <a href="/matches">Mogelijke koppelingen</a> · <a href="/tags">Netwerktags</a></nav></header>
     <p>LinkedIn: {total_contacts} contacten · {total_messages} berichten<br>Instagram: {ig_accounts} accounts · {ig_messages_total} inbox-berichten<br>Facebook: {fb_people_total} personen · {fb_message_total} berichten<br>Twitter: {twitter_accounts} historische accounts · {twitter_tweets} tweets · {twitter_dms} DM’s</p>
     {("<p>Geïmporteerde rijen: " + str(imported) + "</p>") if imported else ""}
     {("<p>Instagram: " + str(ig_imported) + " inbox-berichten verwerkt.</p>") if ig_imported >= 0 else ""}
