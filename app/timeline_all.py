@@ -38,7 +38,9 @@ def _all_events(db, person_id, platform):
                 summary=(row["content"] or "")[:380]
                 item=_event("LinkedIn",row["date"],
                             row["subject"] or "LinkedIn-bericht",summary,
-                            "", "Uit LinkedIn-export · " + (row["sender"] or "afzender onbekend"))
+                            "/person/"+str(person_id)+"/linkedin/message?"+
+                            urlencode({"key":row["message_key"]}),
+                            "Uit LinkedIn-export · " + (row["sender"] or "afzender onbekend"))
                 if item: events.append(item)
 
     if platform in ("all","facebook"):
