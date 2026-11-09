@@ -42,7 +42,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "1.0.0-rc1"
+APP_VERSION = "1.0.0"
 
 
 @app.middleware("http")
