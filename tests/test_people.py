@@ -2,6 +2,8 @@ import sqlite3
 import unittest
 
 from app.identities import migrate as migrate_identities, link
+from app.facebook import migrate as migrate_facebook
+from app.twitter import migrate as migrate_twitter
 from app.people import merged_contacts, profile, profile_url
 from app.context import migrate as migrate_context
 from app.manual import migrate as migrate_manual
@@ -38,6 +40,8 @@ class PeopleTests(unittest.TestCase):
         migrate_people(self.db)
         migrate_context(self.db)
         migrate_manual(self.db)
+        migrate_facebook(self.db)
+        migrate_twitter(self.db)
         sync_people(self.db)
 
     def linkedin_search_rows(self):
