@@ -6,6 +6,7 @@ services:
       - "8098:8080"
     volumes:
       - ./data:/data
+      - /etc/homelab-secrets/hermes/farley_api_key:/run/secrets/farley_api_key:ro
     environment:
       DATA_DIR: /data
     networks:
