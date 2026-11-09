@@ -8,3 +8,12 @@ services:
       - ./data:/data
     environment:
       DATA_DIR: /data
+    networks:
+      default:
+      farley-api:
+        aliases:
+          - farley-file
+
+networks:
+  farley-api:
+    external: true
