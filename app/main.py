@@ -27,7 +27,7 @@ from app.people import profile as render_profile, profile_url, merged_contacts
 from app.person_ids import migrate as migrate_person_ids, sync as sync_person_ids, account_person, details as person_details, add_note, remove_note
 from app.context import migrate as migrate_context, save as save_context
 from app.manual import migrate as migrate_manual, create_person, rename_person, search_manual, display_name as farley_display_name, save_job, delete_manual_job, possible_duplicates, delete_person
-from app.person_ids import merge_people
+from app.person_ids import merge_people, detach_account
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact, migrate_facebook_matches, facebook_candidates, reject_facebook_match
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 from app.smart_matches import migrate as migrate_smart_matches, candidates as smart_candidates, reject as reject_smart_match
@@ -467,6 +467,22 @@ def remove_person_job(person_id: int, job_id: int = Form(...)):
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
     return RedirectResponse("/person/" + str(person_id), status_code=303)
+
+
+@app.post("/person/{person_id}/detach")
+def detach_social_account(person_id: int, platform: str = Form(...),
+                          account: str = Form(...), confirmed: str = Form("")):
+    if confirmed != "yes":
+        raise HTTPException(400,"Ontkoppelen moet bevestigd worden")
+    with connect() as db:
+        try:
+            info=person_details(db,person_id)
+            if info is None:
+                raise ValueError("Persoon niet gevonden")
+            detach_account(db,info[0],platform,account)
+        except ValueError as exc:
+            raise HTTPException(400,str(exc)) from exc
+    return RedirectResponse("/person/"+str(info[0]),status_code=303)
 
 
 @app.post("/person/{person_id}/attach")
