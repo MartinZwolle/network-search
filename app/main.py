@@ -34,6 +34,7 @@ from app.smart_matches import migrate as migrate_smart_matches, candidates as sm
 from app.reviewed import migrate as migrate_reviewed, mark as mark_reviewed
 from app.ui import polish as polish_page
 from app.matches_view import render as render_match_proposals
+from app.linkedin_view import message as render_linkedin_message
 from app.smart_matches import restore as restore_smart_match
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
@@ -775,6 +776,18 @@ def person_detail(linkedin_url: str = "", instagram_username: str = "", find: st
     if find:
         destination += "?find=" + quote(find, safe="")
     return RedirectResponse(destination, status_code=303)
+
+
+@app.get("/person/{person_id}/linkedin/message",response_class=HTMLResponse)
+def person_linkedin_message(person_id: int, key: str):
+    with connect() as db:
+        info=person_details(db,person_id)
+        if info is None:
+            raise HTTPException(404,"Persoon niet gevonden")
+        page=render_linkedin_message(db,info[0],key)
+        if page is None:
+            raise HTTPException(404,"LinkedIn-bericht niet gevonden bij deze persoon")
+        return page
 
 
 @app.get("/person/{person_id}", response_class=HTMLResponse)
