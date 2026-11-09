@@ -89,7 +89,7 @@ class PeopleTests(unittest.TestCase):
 
     def test_instagram_only_profile_can_search_linkedin(self):
         html = profile(
-            self.db, instagram_username="ilsewintermans", find="Ilse",
+            self.db, instagram_username="ilsewintermans", account_query="Ilse",
             footer=lambda: "", profile_key=lambda _: "",
         )
         self.assertIn("Sociaal account koppelen", html)
