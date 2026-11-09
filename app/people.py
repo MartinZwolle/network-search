@@ -11,6 +11,7 @@ from app.person_ids import account_person, details as person_details
 from app.context import get as get_context, person_tags
 from app.manual import display_name as farley_display_name, employment as farley_employment, possible_duplicates
 from app.timeline_all import render as render_combined_timeline
+from app.account_finder import render as render_account_finder
 
 CSS = """
 :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
@@ -84,7 +85,8 @@ def merged_contacts(db, linkedin_results, instagram_results):
 
 def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
             contact_timeline=None, profile_key=None, person_id=None,
-            timeline_platform='all', timeline_page=1):
+            timeline_platform='all', timeline_page=1,
+            account_platform='all', account_query=''):
     if person_id is not None:
         info = person_details(db, person_id)
         if info is None:
@@ -305,7 +307,7 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  '<label>Einddatum<br><input name="ended" type="date"></label><br>'
                  '<label>Toelichting<br><textarea name="note" maxlength="2000"></textarea></label><br>'
                  '<button type="submit">Functie toevoegen</button></form></details></section>')
-    html += '<section><h2>Sociale accounts</h2>'
+    html += '<section id="sociale-accounts"><h2>Sociale accounts</h2>'
     if person_id is not None:
         fb_keys = [a["account_key"] for a in person_details(db, person_id)[1]
                    if a["platform"] == "facebook"]
@@ -358,18 +360,7 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                        + _detach_link(person_id,"twitter",uid) + '</article>')
 
     if person_id is not None:
-        html += (f'<details><summary style="cursor:pointer;color:#087f80;font-weight:700">+ Sociaal account koppelen</summary>'
-                 '<p class="muted">Koppel een bestaand sociaal account '
-                 'aan deze persoon, ook als je hem of haar handmatig hebt aangemaakt. '
-                 'Dit is een bewuste samenvoeging van twee profielen.</p>'
-                 f'<form method="post" action="/person/{person_id}/attach">'
-                 '<label>Platform<br><select name="platform">'
-                 '<option value="linkedin">LinkedIn</option>'
-                 '<option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="twitter">Twitter</option></select></label><br>'
-                 '<label>LinkedIn-URL, Instagram-gebruikersnaam, Facebook-naam of Twitter-account-ID<br>'
-                 '<input type="text" name="account" required maxlength="600" '
-                 'style="width:min(100%,480px);padding:10px"></label><br>'
-                 '<button type="submit">Account koppelen</button></form></details>')
+        html += render_account_finder(db,person_id,account_platform,account_query)
 
     html += '</section>'
     if person_id is not None:
