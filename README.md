@@ -4,11 +4,11 @@
 
 Een lichte, zelfgehoste zoekmachine voor je persoonlijke netwerk over meerdere sociale platforms. Zoek op naam, functie, werkgever en de inhoud van LinkedIn-gesprekken. Gebouwd met **FastAPI**, **SQLite FTS5** en Docker.
 
-> **Huidige versie: v1.0.0-rc1** — release candidate; nog lokaal verifiëren vóór productie. — trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen. Nog geen AI/semantische zoekmachine.
+> **Huidige versie: v1.0.0** — eerste stabiele release. Trefwoordzoeken met Nederlandstalige en Engelstalige synoniemen; geen AI/semantische zoekmachine.
 
-## Farley File 1.0 — release candidate
+## Farley File 1.0
 
-Deze release kandidaat consolideert het ontwerp na een pagina-voor-pagina-review.
+Deze release consolideert het ontwerp na een pagina-voor-pagina-review en is op 9 november 2026 op de homelab-omgeving functioneel geaccepteerd.
 
 - **Gedeelde kop en navigatie:** ieder scherm, inclusief Twitter-verkenner en gespreksdetails, krijgt het logo, de titel en dezelfde navigatie. De homepage blijft de visuele basis.
 - **Netwerkactiviteit:** geregistreerde contacten worden als persoon gededupliceerd en je kunt ze afvinken of terugzetten. Afhandeling wordt per persoons-ID opgeslagen in `farley_reviewed` en volgt historische ID-redirects na koppelingen.
@@ -18,7 +18,7 @@ Deze release kandidaat consolideert het ontwerp na een pagina-voor-pagina-review
 - **Account zoeken:** zoek vanuit het persoonsprofiel een reeds geïmporteerd account in alle vier de bronnen en bevestig zelf de koppeling. Direct invoeren van een exact account blijft mogelijk.
 - **Tijdlijn:** één chronologisch, filterbaar overzicht met LinkedIn-berichten, Facebook-gesprekken, je eigen Twitter-vermeldingen/replies en Twitter-DM-gesprekken. Volledige LinkedIn-berichten, Facebook-gesprekken en Twitter-DM's hebben een eigen detailweergave. Instagram-inboxberichten ontbreken bewust zolang afzenders niet betrouwbaar naar accounts te herleiden zijn.
 
-**Belangrijk voor de uitrol:** deze release kandidaat is via GitHub gecommit, maar niet op de homelab-/productiedatabase getest. Maak een databaseback-up en controleer eerst de GitHub Actions-testuitslag (Python 3.12 compile + unittest). Deploy vervolgens bij voorkeur naar een testomgeving of met eenvoudig herstel naar de vorige image. Herimporteren is niet nodig.
+**Bij een nieuwe installatie of upgrade:** maak vooraf een databaseback-up. De Python 3.12 compile- en unittest-controles waren groen; de belangrijkste schermen, het afvinken, de tijdlijn en het handmatig koppelen zijn vervolgens door de gebruiker op de homelab-installatie getest. Herimporteren is niet nodig.
 
 De enige nieuwe tabel is `farley_reviewed`, die idempotent wordt aangemaakt. Een nieuw geïmporteerd account wordt nooit vanzelf met een persoon gekoppeld. WhatsApp valt buiten 1.0.
 
