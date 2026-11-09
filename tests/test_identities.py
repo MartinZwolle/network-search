@@ -9,7 +9,7 @@ class IdentityTests(unittest.TestCase):
         self.db = sqlite3.connect(":memory:")
         self.db.row_factory = sqlite3.Row
         self.db.executescript("""
-        CREATE TABLE contacts(url TEXT PRIMARY KEY, first_name TEXT, last_name TEXT);
+        CREATE TABLE contacts(url TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, company TEXT DEFAULT '', position TEXT DEFAULT '');
         CREATE TABLE instagram_accounts(username TEXT PRIMARY KEY, follows INTEGER DEFAULT 1, follower INTEGER DEFAULT 0);
         INSERT INTO contacts VALUES ('https://linkedin.com/in/ilse', 'Ilse', 'Wintermans');
         INSERT INTO instagram_accounts(username) VALUES ('ilsewintermans');
