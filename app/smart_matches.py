@@ -59,6 +59,14 @@ def _rows(db):
             rec["facebook_keys"].add(key)
         elif platform == "instagram":
             rec["handles"].add(squeezed(key))
+        elif platform == "twitter":
+            # Historical observed handles are weak clues, never identities.
+            # Ignore numeric IDs without any handle.
+            for handle in db.execute("""SELECT DISTINCT handle FROM twitter_handles
+                WHERE user_id=? ORDER BY handle LIMIT 12""",(key,)):
+                label=squeezed(handle["handle"])
+                if len(label)>=6:
+                    rec["handles"].add(label)
     for row in db.execute("""SELECT a.person_id,c.first_name,c.last_name,c.company
         FROM farley_accounts a JOIN contacts c
           ON a.platform='linkedin' AND a.account_key=c.url"""):
@@ -239,3 +247,12 @@ def reject(db,person_a,person_b):
     low,high=sorted((one,two))
     db.execute("INSERT OR IGNORE INTO farley_match_rejections VALUES (?,?,?)",
                (low,high,datetime.now(timezone.utc).isoformat()))
+
+
+def restore(db,person_a,person_b):
+    one,two=resolve(db,person_a),resolve(db,person_b)
+    if one==two:
+        raise ValueError("De profielen zijn inmiddels gekoppeld")
+    low,high=sorted((one,two))
+    db.execute("DELETE FROM farley_match_rejections WHERE person_low=? AND person_high=?",
+               (low,high))
