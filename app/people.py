@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.person_ids import account_person, details as person_details
 from app.context import get as get_context, person_tags
 from app.manual import display_name as farley_display_name, employment as farley_employment, possible_duplicates
+from app.timeline_all import render as render_combined_timeline
 
 CSS = """
 :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
@@ -69,7 +70,8 @@ def merged_contacts(db, linkedin_results, instagram_results):
 
 
 def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
-            contact_timeline=None, profile_key=None, person_id=None):
+            contact_timeline=None, profile_key=None, person_id=None,
+            timeline_platform='all', timeline_page=1):
     if person_id is not None:
         info = person_details(db, person_id)
         if info is None:
@@ -212,6 +214,43 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  '<button type="submit" style="margin-top:16px">Opslaan</button>'
                  '</form></details></section>')
     if person_id is not None:
+        html += (f'<section><h2>Obsidian · gespreksverslagen</h2>'
+                 '<p class="muted">Schrijf je gespreksverslagen in Obsidian en verwijs '
+                 'vanuit deze persoonspagina naar de notities. De inhoud wordt hier niet gekopieerd.</p>'
+                 f'<button type="button" id="copy-person-link" data-id="{person_id}" '
+                 f'data-name="{escape(name, quote=True)}">📋 Kopieer Markdown-link voor Obsidian</button>'
+                 '<span id="copy-status" role="status" style="margin-left:12px"></span>'
+                 '<script>document.getElementById("copy-person-link").addEventListener("click",async function(){'
+                 'const link=window.location.origin+"/person/"+this.dataset.id;'
+                 'const label="[👤 "+this.dataset.name+"]("+link+")";'
+                 'try{await navigator.clipboard.writeText(label);'
+                 'document.getElementById("copy-status").textContent="Gekopieerd!";}'
+                 'catch(e){window.prompt("Kopieer deze Markdown-link:",label);}'
+                 '});</script>')
+        notes = db.execute(
+            "SELECT id,title,target FROM farley_notes WHERE person_id=? ORDER BY id DESC",
+            (person_id,)
+        ).fetchall()
+        for note in notes:
+            html += (f'<article><a href="{escape(note["target"], quote=True)}">'
+                     f'{escape(note["title"])}</a>'
+                     '<form method="post" action="/obsidian-note/delete">'
+                     f'<input type="hidden" name="person_id" value="{person_id}">'
+                     f'<input type="hidden" name="note_id" value="{note["id"]}">'
+                     '<button type="submit" style="background:#69767a">Verwijder verwijzing</button>'
+                     '</form></article>')
+        html += (f'<form method="post" action="/obsidian-note/add">'
+                 f'<input type="hidden" name="person_id" value="{person_id}">'
+                 '<label for="note_title">Titel van de notitie</label><br>'
+                 '<input id="note_title" type="text" name="title" maxlength="160" required '
+                 'style="width:min(100%,480px);padding:10px"><br>'
+                 '<label for="note_target">Obsidian-link (obsidian://...)</label><br>'
+                 '<input id="note_target" type="text" name="target" maxlength="2048" required '
+                 'placeholder="obsidian://open?vault=..." '
+                 'style="width:min(100%,480px);padding:10px"><br>'
+                 '<button type="submit">Notitielink toevoegen</button></form></section>')
+
+    if person_id is not None:
         html += '<section><h2>Functies en werkhistorie</h2>'
         html += ('<p class="muted">Geïmporteerde LinkedIn-functies blijven als bron bewaard. '
                  'Handmatige correcties en aanvullende functies worden nooit overschreven '
@@ -293,61 +332,22 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                      '<input type="hidden" name="source" value="person">'
                      '<button type="submit" style="background:#69767a">Ontkoppelen</button></form>')
         html += '</article>'
-    html += '</section>'
+    # Twitter is part of the same social accounts section.
     if person_id is not None:
         twitter_ids = [a["account_key"] for a in person_details(db,person_id)[1]
                        if a["platform"]=="twitter"]
         if twitter_ids:
-            html += '<section><h2>Historische Twitter-identiteit</h2>'
             for uid in twitter_ids:
                 rows=db.execute("SELECT DISTINCT handle FROM twitter_handles WHERE user_id=? ORDER BY handle",
                                 (uid,)).fetchall()
                 labels=", ".join("@"+r["handle"] for r in rows)
-                html+=(f'<article><strong>ID: {escape(uid)}</strong><br>'
+                html+=(f'<article><strong>Twitter</strong> · ID: {escape(uid)}<br>'
                        f'<small>Bekende historische gebruikersnamen: '
                        f'{escape(labels or "onbekend")}</small><br>'
                        f'<a href="/twitter?person_id={person_id}">Tweets en DM’s bekijken</a></article>')
-            html+='</section>'
 
     if person_id is not None:
-        html += (f'<section><h2>Obsidian · gespreksverslagen</h2>'
-                 '<p class="muted">Schrijf je gespreksverslagen in Obsidian en verwijs '
-                 'vanuit deze persoonspagina naar de notities. De inhoud wordt hier niet gekopieerd.</p>'
-                 f'<button type="button" id="copy-person-link" data-id="{person_id}" '
-                 f'data-name="{escape(name, quote=True)}">📋 Kopieer Markdown-link voor Obsidian</button>'
-                 '<span id="copy-status" role="status" style="margin-left:12px"></span>'
-                 '<script>document.getElementById("copy-person-link").addEventListener("click",async function(){'
-                 'const link=window.location.origin+"/person/"+this.dataset.id;'
-                 'const label="[👤 "+this.dataset.name+"]("+link+")";'
-                 'try{await navigator.clipboard.writeText(label);'
-                 'document.getElementById("copy-status").textContent="Gekopieerd!";}'
-                 'catch(e){window.prompt("Kopieer deze Markdown-link:",label);}'
-                 '});</script>')
-        notes = db.execute(
-            "SELECT id,title,target FROM farley_notes WHERE person_id=? ORDER BY id DESC",
-            (person_id,)
-        ).fetchall()
-        for note in notes:
-            html += (f'<article><a href="{escape(note["target"], quote=True)}">'
-                     f'{escape(note["title"])}</a>'
-                     '<form method="post" action="/obsidian-note/delete">'
-                     f'<input type="hidden" name="person_id" value="{person_id}">'
-                     f'<input type="hidden" name="note_id" value="{note["id"]}">'
-                     '<button type="submit" style="background:#69767a">Verwijder verwijzing</button>'
-                     '</form></article>')
-        html += (f'<form method="post" action="/obsidian-note/add">'
-                 f'<input type="hidden" name="person_id" value="{person_id}">'
-                 '<label for="note_title">Titel van de notitie</label><br>'
-                 '<input id="note_title" type="text" name="title" maxlength="160" required '
-                 'style="width:min(100%,480px);padding:10px"><br>'
-                 '<label for="note_target">Obsidian-link (obsidian://...)</label><br>'
-                 '<input id="note_target" type="text" name="target" maxlength="2048" required '
-                 'placeholder="obsidian://open?vault=..." '
-                 'style="width:min(100%,480px);padding:10px"><br>'
-                 '<button type="submit">Notitielink toevoegen</button></form></section>')
-
-    if person_id is not None:
-        html += (f'<section><h2>Sociaal account toevoegen</h2>'
+        html += (f'<details><summary style="cursor:pointer;color:#087f80;font-weight:700">+ Sociaal account koppelen</summary>'
                  '<p class="muted">Koppel een bestaand sociaal account '
                  'aan deze persoon, ook als je hem of haar handmatig hebt aangemaakt. '
                  'Dit is een bewuste samenvoeging van twee profielen.</p>'
@@ -358,115 +358,10 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  '<label>LinkedIn-URL, Instagram-gebruikersnaam, Facebook-naam of Twitter-account-ID<br>'
                  '<input type="text" name="account" required maxlength="600" '
                  'style="width:min(100%,480px);padding:10px"></label><br>'
-                 '<button type="submit">Account koppelen</button></form></section>')
+                 '<button type="submit">Account koppelen</button></form></details>')
 
-    # The search is on the person's profile and can be started from EITHER source.
-    if contact is not None or standalone is not None:
-        html += ('<section><h2>Een account aan deze persoon koppelen</h2>'
-                 '<p class="muted">Zoek een account op het andere platform, controleer het profiel, '
-                 'en bevestig zelf. We koppelen nooit automatisch op basis van een naam.</p>'
-                 '<form method="get" action="/person">')
-        if contact is not None:
-            html += f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
-            label = "Zoek een Instagram-gebruikersnaam"
-        else:
-            html += f'<input type="hidden" name="instagram_username" value="{escape(standalone["username"], quote=True)}">'
-            label = "Zoek een LinkedIn-contact op naam"
-        html += (f'<label for="find">{label}</label><br>'
-                 f'<input id="find" name="find" type="search" value="{escape(find, quote=True)}" '
-                 'placeholder="Typ minstens 2 tekens" required minlength="2"> '
-                 '<button type="submit">Zoeken</button></form>')
-        term = find.strip().casefold()
-        if len(term) >= 2:
-            like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-            if contact is not None:
-                options = db.execute(
-                    """SELECT a.* FROM instagram_accounts a WHERE a.username LIKE ? ESCAPE '\\'
-                       AND NOT EXISTS (SELECT 1 FROM profile_links l WHERE l.instagram_username=a.username)
-                       ORDER BY a.username LIMIT 30""", (like,)
-                ).fetchall()
-                for option in options:
-                    handle = option["username"]
-                    ig_url = "https://www.instagram.com/" + quote(handle, safe="") + "/"
-                    html += (f'<article><a href="{ig_url}" target="_blank" rel="noopener noreferrer">'
-                             f'@{escape(handle)} ↗</a>'
-                             '<form action="/profile-link" method="post">'
-                             f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
-                             f'<input type="hidden" name="instagram_username" value="{escape(handle, quote=True)}">'
-                             '<input type="hidden" name="source" value="person">'
-                             '<button type="submit">Aan deze persoon koppelen</button></form></article>')
-            else:
-                options = db.execute(
-                    """SELECT * FROM contacts
-                       WHERE (first_name || ' ' || last_name) LIKE ? ESCAPE '\\'
-                       ORDER BY last_name, first_name LIMIT 30""", (like,)
-                ).fetchall()
-                for option in options:
-                    url = option["url"]
-                    person_name = " ".join(filter(None, [option["first_name"], option["last_name"]]))
-                    html += (f'<article><a href="{escape(url, quote=True)}" '
-                             f'target="_blank" rel="noopener noreferrer">{escape(person_name)} ↗</a>'
-                             f' <small>{escape(option["company"] or "")}</small>'
-                             '<form action="/profile-link" method="post">'
-                             f'<input type="hidden" name="linkedin_url" value="{escape(url, quote=True)}">'
-                             f'<input type="hidden" name="instagram_username" value="{escape(standalone["username"], quote=True)}">'
-                             '<input type="hidden" name="source" value="person">'
-                             '<button type="submit">Aan deze persoon koppelen</button></form></article>')
-            if not options:
-                html += '<p>Geen beschikbare accounts gevonden. Probeer een andere zoekterm.</p>'
-        html += '</section>'
-
-    if contact is not None:
-        history = db.execute(
-            """SELECT m.* FROM contact_messages cm JOIN messages m
-               ON m.message_key=cm.message_key WHERE cm.contact_url=?
-               ORDER BY m.date DESC""", (linkedin_url,)
-        ).fetchall()
-        jobs = db.execute(
-            """SELECT company, position, first_seen_at, superseded_at
-               FROM employment_history WHERE contact_url=? ORDER BY id DESC""",
-            (linkedin_url,)
-        ).fetchall()
-        received = sum(profile_key(m["sender_url"]) == profile_key(linkedin_url) for m in history)
-        last = history[0]["date"] if history else "Geen berichten gevonden"
-        html += (f'<section><h2>LinkedIn-geschiedenis</h2><p>{len(history)} berichten '
-                 f'· {received} ontvangen · {len(history)-received} overige</p>'
-                 f'<p>Laatste LinkedIn-bericht: {escape(last)}</p></section>')
-        if contact_timeline:
-            html += contact_timeline(history, jobs)
-        html += '<section><h2>LinkedIn-berichten</h2>'
-        for msg in history:
-            html += (f'<article><small>{escape(msg["date"] or "")} · '
-                     f'{escape(msg["sender"] or "")}</small>'
-                     f'<h3>{escape(msg["subject"] or "(geen onderwerp)")}</h3>'
-                     f'<pre>{escape(msg["content"] or "")}</pre></article>')
-        html += '</section>'
+    html += '</section>'
     if person_id is not None:
-        fb_keys = [a["account_key"] for a in person_details(db, person_id)[1]
-                   if a["platform"] == "facebook"]
-        html += '<section><h2>Facebook-gesprekken</h2>'
-        if fb_keys:
-            placeholders = ",".join("?" for _ in fb_keys)
-            threads = db.execute(
-                f"""SELECT DISTINCT t.id,t.title,t.is_group,
-                    (SELECT count(*) FROM facebook_messages m WHERE m.thread_id=t.id) AS messages
-                    FROM facebook_threads t JOIN facebook_thread_people tp ON tp.thread_id=t.id
-                    WHERE tp.fb_key IN ({placeholders})
-                    ORDER BY messages DESC LIMIT 100""",
-                fb_keys,
-            ).fetchall()
-            for thread in threads:
-                html += (f'<article><a href="/facebook/thread/{escape(thread["id"],quote=True)}">'
-                         f'{escape(thread["title"] or "Facebook-gesprek")}</a>'
-                         f' · <small>{thread["messages"]} berichten'
-                         f'{" · groepsgesprek" if thread["is_group"] else ""}</small></article>')
-            if not threads:
-                html += '<p class="muted">Geen Facebook-gesprekken gevonden.</p>'
-        else:
-            html += '<p class="muted">Geen Facebook-account gekoppeld.</p>'
-        html += '</section>'
-    html += ('<section><h2>Instagram-berichten</h2>'
-             '<p class="muted">Instagram-inboxberichten zijn nog niet betrouwbaar aan '
-             'gebruikersnamen gekoppeld. Ze blijven doorzoekbaar op de startpagina; '
-             'we tonen ze hier pas wanneer de afzender correct te herleiden is.</p></section>')
+        html += render_combined_timeline(db, person_id,
+                                        timeline_platform, timeline_page)
     return html + (footer() if footer else "") + "</html>"
