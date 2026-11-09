@@ -87,6 +87,15 @@ def polish(html, path):
         return html.replace('</style>','</style>'+STYLE,1)
 
     title = _title(path,html)
+    has_header = bool(re.search(r'<header\\b',html,re.I))
+    if not has_header:
+        # Move the page heading into the shared masthead instead of
+        # showing a second, differently spaced title below it.
+        heading = re.search(r'<h1\\b[^>]*>(.*?)</h1>',html,re.I|re.S)
+        if heading:
+            if not title:
+                title=heading.group(1)
+            html=html[:heading.start()]+html[heading.end():]
     intro = (
         '<header class="farley-shell">'
         '<span class="brand">Elegant Chaos / Labs</span>'
