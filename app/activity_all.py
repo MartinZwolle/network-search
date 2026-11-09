@@ -10,6 +10,7 @@ from html import escape
 from app.activity import parse_date, _bars
 from app.person_ids import account_person
 from app.manual import display_name
+from app.reviewed import reviewed as reviewed_people
 
 
 def _timestamp(ms):
@@ -112,7 +113,7 @@ def gather(db):
     return annual,entries,unknown
 
 
-def render(db, source="all"):
+def render(db, source="all", status="open"):
     choices=("all","linkedin","instagram","facebook","twitter")
     if source not in choices:
         source="all"
@@ -179,6 +180,9 @@ def render(db, source="all"):
         if last is not None and last.year<=cutoff:
             dormant.append((pid,entry))
     dormant.sort(key=lambda item:(-item[1]["messages"],display_name(db,item[0]).casefold()))
+    done=reviewed_people(db)
+    status="done" if status=="done" else "open"
+    dormant=[(pid,entry) for pid,entry in dormant if (pid in done)==(status=="done")]
     html+='<section><h2>Contacten om opnieuw te bekijken</h2>'
     html+=('<p class="muted">Ten minste drie herleidbare berichten en geen '
            'herleidbaar bericht in de afgelopen twee kalenderjaren. '
@@ -186,6 +190,8 @@ def render(db, source="all"):
            'niet gesproken hebt. Voor Facebook tellen hier alleen berichten '
            'die de persoon zelf heeft verzonden; bij groepsgesprekken is dat '
            'geen één-op-één-contact.</p>')
+    html+=('<p><a href="/activity?status=open"'+(' aria-current="page"' if status=='open' else '')+'>Nog te bekijken</a> · '
+           '<a href="/activity?status=done"'+(' aria-current="page"' if status=='done' else '')+'>Afgehandeld</a></p>')
     if source!="all":
         html+='<p>Schakel naar <a href="/activity">Alle platforms</a> voor dit overzicht.</p>'
     elif not dormant:
@@ -197,5 +203,12 @@ def render(db, source="all"):
                f'{escape(display_name(db,pid))}</strong></a><br>'
                f'<small>{entry["messages"]} berichten · {escape(counts)}'
                f' · laatste geregistreerde bericht: {entry["last"].date().isoformat()}'
-               f'{" · inclusief groepsberichten" if entry["group"] else ""}</small></article>')
+               f'{" · inclusief groepsberichten" if entry["group"] else ""}</small>'
+               f'<form method="post" action="/activity/review" style="display:inline-block;margin-left:12px">'
+               f'<input type="hidden" name="person_id" value="{pid}">'
+               f'<input type="hidden" name="action" value="{"undo" if status=="done" else "done"}">'
+               f'<button type="submit" style="background:#e4f3f0;color:#087f80;border:1px solid #bdd9d4;cursor:pointer;padding:5px 10px">'
+               f'{"↶ Terugzetten" if status=="done" else "✓ Bekeken"}</button></form>'
+               + (f'<small> · afgehandeld op {escape(done[pid][:10])}</small>' if status=="done" else '')
+               + '</article>')
     return html+'</section>'
