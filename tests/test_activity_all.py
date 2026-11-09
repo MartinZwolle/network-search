@@ -7,6 +7,8 @@ from app.facebook import migrate as migrate_fb
 from app.instagram import migrate as migrate_ig
 from app.context import migrate as migrate_context
 from app.manual import migrate as migrate_manual
+from app.twitter import migrate as migrate_twitter
+from app.reviewed import migrate as migrate_reviewed
 
 
 class CrossPlatformActivityTests(unittest.TestCase):
@@ -29,6 +31,8 @@ class CrossPlatformActivityTests(unittest.TestCase):
         migrate_manual(self.db)
         migrate_ig(self.db)
         migrate_fb(self.db)
+        migrate_twitter(self.db)
+        migrate_reviewed(self.db)
         self.li=ensure_account(self.db,"linkedin","https://linkedin.com/in/ilse")
         self.fb=ensure_account(self.db,"facebook","name:jan jansen")
         self.db.execute("INSERT INTO facebook_people VALUES('name:jan jansen','Jan Jansen','',1)")
