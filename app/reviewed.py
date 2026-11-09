@@ -18,7 +18,12 @@ def mark(db, person_id, reviewed):
             reviewed_at=excluded.reviewed_at""",
             (pid,datetime.now(timezone.utc).isoformat(timespec="seconds")))
     else:
-        db.execute("DELETE FROM farley_reviewed WHERE person_id=?", (pid,))
+        # A completed old identity may now redirect to this merged person.
+        # Clearing it must clear every historical alias as well.
+        for row in db.execute("SELECT person_id FROM farley_reviewed").fetchall():
+            if resolve(db,row["person_id"]) == pid:
+                db.execute("DELETE FROM farley_reviewed WHERE person_id=?",
+                           (row["person_id"],))
 
 def reviewed(db):
     # Resolve after merges; old completed person remains completed.
