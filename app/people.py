@@ -27,6 +27,19 @@ form{margin:12px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
 """
 
 
+def _detach_link(person_id, platform, key):
+    """Small, confirmable per-account unlink control; no source data is removed."""
+    return (f'<form method="post" action="/person/{person_id}/detach" '
+            'style="display:inline-block;margin-left:12px" '
+            'onsubmit="return confirm(\'Dit sociale account loskoppelen? Berichten blijven bewaard.\')">'
+            f'<input type="hidden" name="platform" value="{escape(platform,quote=True)}">'
+            f'<input type="hidden" name="account" value="{escape(key,quote=True)}">'
+            '<input type="hidden" name="confirmed" value="yes">'
+            '<button type="submit" style="font:inherit;font-size:.82rem;'
+            'background:transparent;border:0;color:#647078;text-decoration:underline;'
+            'padding:2px 4px;cursor:pointer">Ontkoppelen</button></form>')
+
+
 def profile_url(linkedin_url=None, instagram_username=None):
     if linkedin_url:
         return "/person?linkedin_url=" + quote(linkedin_url, safe="")
@@ -303,13 +316,15 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                 html += (f'<article><strong>Facebook</strong> · {escape(fb["display_name"])}'
                          f' <small>{"· Facebook-vriend" if fb["friend"] else "· Gespreksdeelnemer"}'
                          f'{" · sinds " + escape(fb["friend_since"]) if fb["friend_since"] else ""}'
-                         '</small></article>')
+                         '</small>' + _detach_link(person_id,"facebook",fb_key) + '</article>')
 
     if contact is not None:
         html += (f'<article><strong>LinkedIn</strong> · '
                  f'<a href="{escape(linkedin_url, quote=True)}" target="_blank" rel="noopener noreferrer">'
                  f'{escape(name)} ↗</a><br><small>{escape(contact["position"] or "")} '
-                 f'· {escape(contact["company"] or "")}</small></article>')
+                 f'· {escape(contact["company"] or "")}</small>'
+                 + (_detach_link(person_id,"linkedin",linkedin_url) if person_id else "")
+                 + '</article>')
     if person_id is not None:
         info = person_details(db, person_id)
         handles = [a["account_key"] for a in info[1] if a["platform"] == "instagram"]
@@ -324,13 +339,8 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                  f'<br><small>{"Jij volgt dit account" if account["follows"] else ""}'
                  f'{" · " if account["follows"] and account["follower"] else ""}'
                  f'{"Volgt jou" if account["follower"] else ""}</small>')
-        if contact is not None:
-            html += (f'<form method="post" action="/profile-link">'
-                     f'<input type="hidden" name="linkedin_url" value="{escape(linkedin_url, quote=True)}">'
-                     f'<input type="hidden" name="instagram_username" value="{escape(handle, quote=True)}">'
-                     '<input type="hidden" name="action" value="unlink">'
-                     '<input type="hidden" name="source" value="person">'
-                     '<button type="submit" style="background:#69767a">Ontkoppelen</button></form>')
+        if person_id is not None:
+            html += _detach_link(person_id,"instagram",handle)
         html += '</article>'
     # Twitter is part of the same social accounts section.
     if person_id is not None:
@@ -344,7 +354,8 @@ def profile(db, linkedin_url="", instagram_username="", find="", footer=None,
                 html+=(f'<article><strong>Twitter</strong> · ID: {escape(uid)}<br>'
                        f'<small>Bekende historische gebruikersnamen: '
                        f'{escape(labels or "onbekend")}</small><br>'
-                       f'<a href="/twitter?person_id={person_id}">Tweets en DM’s bekijken</a></article>')
+                       f'<a href="/twitter?person_id={person_id}">Tweets en DM’s bekijken</a>'
+                       + _detach_link(person_id,"twitter",uid) + '</article>')
 
     if person_id is not None:
         html += (f'<details><summary style="cursor:pointer;color:#087f80;font-weight:700">+ Sociaal account koppelen</summary>'
