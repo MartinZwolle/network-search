@@ -120,6 +120,30 @@ def merge_people(db, destination_id, source_id):
     return dest
 
 
+def detach_account(db, person_id, platform, key):
+    """Move exactly one linked account into a new standalone person.
+
+    Never delete message data or notes belonging to the remaining person.
+    Legacy Instagram profile_links must be removed to prevent re-linking
+    on the next restart or import.
+    """
+    if platform not in ("linkedin","facebook","instagram","twitter"):
+        raise ValueError("Onbekend platform")
+    info=details(db,person_id)
+    if info is None:
+        raise ValueError("Persoon niet gevonden")
+    current=account_person(db,platform,key)
+    if current is None or current!=info[0]:
+        raise ValueError("Dit account hoort niet bij deze persoon")
+    if platform=="instagram":
+        db.execute("DELETE FROM profile_links WHERE instagram_username=?", (key,))
+    new_id=db.execute("INSERT INTO farley_people DEFAULT VALUES").lastrowid
+    db.execute("""UPDATE farley_accounts SET person_id=?
+                  WHERE platform=? AND account_key=? AND person_id=?""",
+               (new_id,platform,key,info[0]))
+    return new_id
+
+
 def detach_instagram(db, instagram_username):
     """Separating a profile does not renumber the remaining person's ID."""
     row = db.execute(
