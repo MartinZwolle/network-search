@@ -31,13 +31,25 @@ from app.person_ids import merge_people
 from app.identities import migrate as migrate_identities, candidates as identity_candidates, compact, link as link_profiles, unlink as unlink_profiles, all_candidates, reject as reject_match, restore as restore_match, resolve_contact, migrate_facebook_matches, facebook_candidates, reject_facebook_match
 from app.employment import migrate as migrate_employment, observe as observe_employment, now_utc
 from app.smart_matches import migrate as migrate_smart_matches, candidates as smart_candidates, reject as reject_smart_match
+from app.reviewed import migrate as migrate_reviewed, mark as mark_reviewed
+from app.ui import polish as polish_page
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-APP_VERSION = "0.12.4"
+APP_VERSION = "1.0.0-rc1"
+
+
+@app.middleware("http")
+async def consistent_app_shell(request, call_next):
+    response = await call_next(request)
+    if "text/html" not in response.headers.get("content-type", ""):
+        return response
+    payload = b"".join([chunk async for chunk in response.body_iterator])
+    decorated = polish_page(payload.decode("utf-8"), request.url.path)
+    return HTMLResponse(decorated, status_code=response.status_code)
 
 
 def footer():
@@ -88,6 +100,7 @@ with connect() as _db:
     migrate_twitter(_db)
     migrate_facebook_matches(_db)
     migrate_smart_matches(_db)
+    migrate_reviewed(_db)
     sync_person_ids(_db)
 
 
@@ -864,10 +877,22 @@ def obsidian_note_delete(person_id: int = Form(...), note_id: int = Form(...)):
     return RedirectResponse("/person/" + str(current_id), status_code=303)
 
 
-@app.get("/activity", response_class=HTMLResponse)
-def activity_page(source: str = "all"):
+@app.post("/activity/review")
+def complete_review(person_id: int = Form(...), action: str = Form(...)):
+    if action not in ("done","undo"):
+        raise HTTPException(400,"Onbekende actie")
     with connect() as db:
-        overview = render_network_activity(db, source)
+        try:
+            mark_reviewed(db,person_id,action=="done")
+        except ValueError as exc:
+            raise HTTPException(400,str(exc)) from exc
+    return RedirectResponse("/activity?status="+("done" if action=="undo" else "open"),status_code=303)
+
+
+@app.get("/activity", response_class=HTMLResponse)
+def activity_page(source: str = "all", status: str = "open"):
+    with connect() as db:
+        overview = render_network_activity(db, source, status)
     page = """<!doctype html><html lang="nl"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Netwerkactiviteit · Farley File</title>
