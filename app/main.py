@@ -779,7 +779,8 @@ def person_detail(linkedin_url: str = "", instagram_username: str = "", find: st
 
 @app.get("/person/{person_id}", response_class=HTMLResponse)
 def person_by_id(person_id: int, find: str = "",
-                 timeline_platform: str = "all", timeline_page: int = 1):
+                 timeline_platform: str = "all", timeline_page: int = 1,
+                 account_platform: str = "all", account_query: str = ""):
     with connect() as db:
         info = person_details(db, person_id)
         if info is None:
@@ -795,7 +796,9 @@ def person_by_id(person_id: int, find: str = "",
                               contact_timeline=contact_timeline,
                               profile_key=profile_key,
                               timeline_platform=timeline_platform,
-                              timeline_page=timeline_page)
+                              timeline_page=timeline_page,
+                              account_platform=account_platform,
+                              account_query=account_query)
 
 
 @app.post("/person/{person_id}/context")
