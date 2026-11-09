@@ -12,8 +12,8 @@ class IdentityTests(unittest.TestCase):
         CREATE TABLE contacts(url TEXT PRIMARY KEY, first_name TEXT, last_name TEXT);
         CREATE TABLE instagram_accounts(username TEXT PRIMARY KEY, follows INTEGER DEFAULT 1, follower INTEGER DEFAULT 0);
         INSERT INTO contacts VALUES ('https://linkedin.com/in/ilse', 'Ilse', 'Wintermans');
-        INSERT INTO instagram_accounts VALUES ('ilsewintermans');
-        INSERT INTO instagram_accounts VALUES ('ilsesomethingelse');
+        INSERT INTO instagram_accounts(username) VALUES ('ilsewintermans');
+        INSERT INTO instagram_accounts(username) VALUES ('ilsesomethingelse');
         """)
         migrate(self.db)
         migrate_people(self.db)
