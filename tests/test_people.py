@@ -85,14 +85,14 @@ class PeopleTests(unittest.TestCase):
             footer=lambda: "", profile_key=lambda _: "",
         )
         self.assertEqual(by_instagram, by_linkedin)
-        self.assertIn("Een account aan deze persoon koppelen", by_instagram)
+        self.assertIn("Sociaal account koppelen", by_instagram)
 
     def test_instagram_only_profile_can_search_linkedin(self):
         html = profile(
             self.db, instagram_username="ilsewintermans", find="Ilse",
             footer=lambda: "", profile_key=lambda _: "",
         )
-        self.assertIn("Zoek een LinkedIn-contact", html)
+        self.assertIn("Sociaal account koppelen", html)
         self.assertIn("Ilse Wintermans", html)
 
 
