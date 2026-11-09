@@ -33,6 +33,8 @@ from app.employment import migrate as migrate_employment, observe as observe_emp
 from app.smart_matches import migrate as migrate_smart_matches, candidates as smart_candidates, reject as reject_smart_match
 from app.reviewed import migrate as migrate_reviewed, mark as mark_reviewed
 from app.ui import polish as polish_page
+from app.matches_view import render as render_match_proposals
+from app.smart_matches import restore as restore_smart_match
 
 DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
@@ -990,146 +992,17 @@ def smart_match(person_a: int = Form(...), person_b: int = Form(...),
     return RedirectResponse("/matches?linked=1#smart",status_code=303)
 
 
+@app.post("/smart-match/restore")
+def restore_rejected_match(person_a: int = Form(...), person_b: int = Form(...)):
+    with connect() as db:
+        try:
+            restore_smart_match(db,person_a,person_b)
+        except ValueError as exc:
+            raise HTTPException(400,str(exc)) from exc
+    return RedirectResponse("/matches",status_code=303)
+
+
 @app.get("/matches", response_class=HTMLResponse)
 def possible_matches(page: int = 1, smart_page: int = 1, linked: int = 0):
     with connect() as db:
-        suggestions = all_candidates(db)
-        smart_suggestions = smart_candidates(db)
-        linked_count = db.execute("SELECT COUNT(*) FROM profile_links").fetchone()[0]
-        rejected_rows = db.execute("""SELECT r.linkedin_url, r.instagram_username,
-            c.first_name, c.last_name FROM profile_rejections r
-            JOIN contacts c ON c.url=r.linkedin_url
-            ORDER BY r.rejected_at DESC LIMIT 30""").fetchall()
-        rejection_count = db.execute("SELECT COUNT(*) FROM profile_rejections").fetchone()[0]
-    page_size = 30
-    total = len(suggestions)
-    max_page = max(1, (total + page_size - 1) // page_size)
-    page = min(max(1, page), max_page)
-    visible = suggestions[(page - 1) * page_size:page * page_size]
-    html = """<!doctype html><html lang="nl"><meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mogelijke koppelingen · Farley File</title>
-    <style>
-    :root{--ink:#252b30;--muted:#647078;--accent:#087f80;--edge:#dde6e5;--paper:#fff;--bg:#f5f7f6}
-    *{box-sizing:border-box}body{font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;
-    max-width:1050px;margin:0 auto;padding:38px 24px 90px;background:var(--bg);color:var(--ink)}
-    h1,h2{line-height:1.25;letter-spacing:-.035em}h1{font-size:clamp(2.3rem,5vw,4rem);margin:.35em 0 .15em}
-    a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
-    header{border-bottom:4px solid var(--accent);padding-bottom:23px;margin-bottom:30px}
-    .brand{font-size:.83rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--accent)}
-    section{background:var(--paper);padding:clamp(20px,4vw,32px);margin:22px 0;
-    border:1px solid var(--edge);border-radius:5px;box-shadow:0 8px 28px #192f2d08}
-    article{padding:18px 0;border-top:1px solid var(--edge)}
-    .muted,small{color:var(--muted)}
-    button{background:var(--accent);color:white;border:0;padding:11px 16px;
-    border-radius:4px;font:inherit;font-weight:700;cursor:pointer;margin-top:9px}
-    </style>
-    <header><span class="brand">Elegant Chaos / Labs</span>
-    <h1>Mogelijke koppelingen</h1>
-    <nav style="margin-top:16px"><a href="/">⌂ Home</a> ·
-    <a href="/activity">Netwerkactiviteit</a> ·
-    <a href="/matches" aria-current="page">Mogelijke koppelingen</a></nav>
-    </header>"""
-    html += """<section><h2>Handmatig koppelen</h2>
-    <p class="muted">Ook voor accounts waarvan de namen niet overeenkomen.
-    Vul de volledige LinkedIn-naam (of profiel-URL) en de exacte Instagram-gebruikersnaam in.
-    Bij dubbele LinkedIn-namen gebruik je de profiel-URL.</p>
-    <form action="/manual-link" method="post">
-    <label for="linkedin_contact">LinkedIn-naam of profiel-URL</label><br>
-    <input id="linkedin_contact" name="linkedin_contact" type="text"
-           placeholder="Bijvoorbeeld Ilse Wintermans" required
-           style="width:100%;max-width:540px;padding:10px;margin-bottom:10px"><br>
-    <label for="instagram_username">Instagram-gebruikersnaam</label><br>
-    <input id="instagram_username" name="instagram_username" type="text"
-           placeholder="@gebruikersnaam" required
-           style="width:100%;max-width:540px;padding:10px;margin-bottom:10px"><br>
-    <button type="submit">Accounts koppelen</button></form></section>"""
-    if linked:
-        html += '<p style="color:#087f80"><strong>Accounts gekoppeld!</strong></p>'
-    html += (f'<section><h2>{total} mogelijke koppelingen</h2>'
-             f'<p>{linked_count} profielen al handmatig gekoppeld.</p>'
-             '<p class="muted">Alleen exacte overeenkomsten tussen een volledige '
-             'LinkedIn-naam zonder spaties en een Instagram-gebruikersnaam. '
-             'Dit is een aanwijzing, geen bewijs dat het dezelfde persoon is. '
-             'Controleer beide profielen voordat je koppelt.</p>')
-    if not visible:
-        html += '<p>Geen nieuwe suggesties gevonden.</p>'
-    for contact, username in visible:
-        name = escape(" ".join(filter(None, [contact["first_name"], contact["last_name"]])))
-        ig_url = "https://www.instagram.com/" + quote(username, safe="") + "/"
-        html += (f'<article><strong>{name}</strong><br>'
-                 f'<small>{escape(contact["position"] or "")} · '
-                 f'{escape(contact["company"] or "")}</small><br>'
-                 f'<a href="{escape(contact["url"], quote=True)}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>'
-                 f' · <a href="{ig_url}" target="_blank" rel="noopener noreferrer">'
-                 f'Instagram @{escape(username)} ↗</a>'
-                 f'<form action="/profile-link" method="post">'
-                 f'<input type="hidden" name="linkedin_url" value="{escape(contact["url"], quote=True)}">'
-                 f'<input type="hidden" name="instagram_username" value="{escape(username, quote=True)}">'
-                 f'<input type="hidden" name="source" value="matches">'
-                 f'<button type="submit">Zelfde persoon — koppelen</button></form></article>')
-    html += '</section><p>'
-    if page > 1:
-        html += f'<a href="/matches?page={page-1}">← Vorige</a> · '
-    html += f'Pagina {page} van {max_page}'
-    if page < max_page:
-        html += f' · <a href="/matches?page={page+1}">Volgende →</a>'
-    html += '</p>'
-    html += (f'<details style="margin-top:24px"><summary style="cursor:pointer">'
-             f'Afgewezen voorstellen ({rejection_count}) — herstellen</summary>'
-             '<section><h2>Afgewezen voorstellen</h2>'
-             '<p class="muted">De laatste 30 afwijzingen. Herstellen maakt de suggestie weer zichtbaar.</p>')
-    for row in rejected_rows:
-        display_name = escape(" ".join(filter(None, [row["first_name"], row["last_name"]])))
-        html += (f'<article>{display_name} ↔ @{escape(row["instagram_username"])}'
-                 f'<form method="post" action="/profile-link">'
-                 f'<input type="hidden" name="linkedin_url" value="{escape(row["linkedin_url"], quote=True)}">'
-                 f'<input type="hidden" name="instagram_username" value="{escape(row["instagram_username"], quote=True)}">'
-                 f'<input type="hidden" name="action" value="restore">'
-                 f'<input type="hidden" name="source" value="matches">'
-                 f'<button type="submit">Afwijzing ongedaan maken</button></form></article>')
-    html += '</section></details>'
-    smart_total = len(smart_suggestions)
-    smart_size = 30
-    smart_pages = max(1, (smart_total + smart_size - 1) // smart_size)
-    smart_page = min(max(1, smart_page), smart_pages)
-    smart_visible = smart_suggestions[(smart_page-1)*smart_size:smart_page*smart_size]
-    html += (f'<section id="smart"><h2>Slimme koppelvoorstellen ({smart_total})</h2>'
-             '<p class="muted">LinkedIn, Facebook, Instagram en handmatige profielen. '
-             'Je ziet waarom twee personen mogelijk dezelfde zijn. '
-             '<strong>Dit zijn aanwijzingen, geen identiteitsbewijs.</strong> '
-             'Er wordt nooit automatisch samengevoegd. '
-             'De gegevens van beide profielen blijven bij een bevestigde koppeling behouden.</p>')
-    if not smart_visible:
-        html += '<p>Geen nieuwe voorstellen op deze pagina.</p>'
-    for item in smart_visible:
-        source_id, target_id = item["source_id"], item["target_id"]
-        evidence = "; ".join(item["reasons"])
-        html += (f'<article><strong>{escape(item["source_name"])}</strong> '
-                 f'({escape(item["source_platforms"])}) ↔ '
-                 f'<strong>{escape(item["target_name"])}</strong> '
-                 f'({escape(item["target_platforms"])})<br>'
-                 f'<small>Waarom: {escape(evidence)}</small><br>'
-                 f'<a href="/person/{source_id}">Profiel 1 bekijken</a> · '
-                 f'<a href="/person/{target_id}">Profiel 2 bekijken</a>'
-                 f'<form method="post" action="/smart-match" '
-                 'onsubmit="return confirm(\'Weet je zeker dat dit dezelfde persoon is? '
-                 'Samenvoegen kan niet automatisch ongedaan worden gemaakt.\')">'
-                 f'<input type="hidden" name="person_a" value="{source_id}">'
-                 f'<input type="hidden" name="person_b" value="{target_id}">'
-                 '<input type="hidden" name="action" value="link">'
-                 '<input type="hidden" name="confirmed" value="yes">'
-                 '<button type="submit">Zelfde persoon — samenvoegen</button></form>'
-                 '<form method="post" action="/smart-match">'
-                 f'<input type="hidden" name="person_a" value="{source_id}">'
-                 f'<input type="hidden" name="person_b" value="{target_id}">'
-                 '<input type="hidden" name="action" value="reject">'
-                 '<button type="submit" style="background:#69767a">Niet dezelfde persoon</button>'
-                 '</form></article>')
-    html += f'<p>Voorstellen: pagina {smart_page} van {smart_pages}. '
-    if smart_page > 1:
-        html += f'<a href="/matches?page={page}&smart_page={smart_page-1}#smart">← Vorige</a> · '
-    if smart_page < smart_pages:
-        html += f'<a href="/matches?page={page}&smart_page={smart_page+1}#smart">Volgende →</a>'
-    html += '</p></section>'
-    return html + footer() + '</html>'
+        return render_match_proposals(db,page,linked=bool(linked))
