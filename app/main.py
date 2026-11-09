@@ -33,6 +33,7 @@ from app.employment import migrate as migrate_employment, observe as observe_emp
 from app.smart_matches import migrate as migrate_smart_matches, candidates as smart_candidates, reject as reject_smart_match
 from app.reviewed import migrate as migrate_reviewed, mark as mark_reviewed
 from app.ui import polish as polish_page
+from app.hermes_api import router as hermes_api_router
 from app.matches_view import render as render_match_proposals
 from app.linkedin_view import message as render_linkedin_message
 from app.smart_matches import restore as restore_smart_match
@@ -41,6 +42,7 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "network.db"
 app = FastAPI(title="Farley File")
+app.include_router(hermes_api_router)
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 APP_VERSION = "1.0.0"
 
